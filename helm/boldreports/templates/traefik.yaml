@@ -47,6 +47,19 @@ spec:
     regex: ^/etlservice(/|$)(.*)
     replacement: /$2
 ---
+{{- if .Values.upgradeCenter.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: boldreports-upgrade-center-trailing-slash
+  {{- include "boldreports.namespace" . | nindent 2 }}
+spec:
+  redirectRegex:
+    regex: ^(https?://[^/]+{{ .Values.upgradeCenter.ingressPath }})$
+    replacement: ${1}/
+    permanent: true
+{{- end }}
+---
 {{- if (and (hasKey .Values.loadBalancer "multipleHost") (hasKey .Values.loadBalancer.multipleHost "hostArray") (gt (len .Values.loadBalancer.multipleHost.hostArray) 0)) }}
   {{- range $groupIdx, $group := .Values.loadBalancer.multipleHost.hostArray }}
     {{- range $hostIdx, $host := $group.hosts }}
@@ -274,6 +287,29 @@ spec:
               name: bold.k8s.pod.id
               maxAge: {{ default "600" $.Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
           {{- end }}
+    {{- if .Values.upgradeCenter.enabled }}
+    - match: |
+        {{- if $isIP }}
+        PathPrefix(`{{ $subPath }}/upgrade-center`)
+        {{- else }}
+        Host(`{{ $host }}`) && PathPrefix(`{{ $subPath }}/upgrade-center`)
+        {{- end }}
+      kind: Rule
+      middlewares:
+        - name: body-limit-200m
+        - name: boldreports-upgrade-center-trailing-slash
+      priority: 1000
+      services:
+        - name: boldreports-upgrade-center
+          port: 80
+          serversTransport: long-timeouts-transport
+          {{- if $.Values.loadBalancer.affinityCookie.enable }}
+          sticky:
+            cookie:
+              name: bold.k8s.pod.id
+              maxAge: {{ default "600" $.Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
+          {{- end }}
+    {{- end }}
 ---
     {{- end }}  {{- /* end per-host */ -}}
   {{- end }}  {{- /* end per-group */ -}}
@@ -501,5 +537,28 @@ spec:
               name: bold.k8s.pod.id
               maxAge: {{ default "600" .Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
           {{- end }}
+    {{- if .Values.upgradeCenter.enabled }}
+    - match: |
+        {{- if $isIP }}
+        PathPrefix(`{{ $subPath }}/upgrade-center`)
+        {{- else }}
+        Host(`{{ $baseHost }}`) && PathPrefix(`{{ $subPath }}/upgrade-center`)
+        {{- end }}
+      kind: Rule
+      middlewares:
+        - name: body-limit-200m
+        - name: boldreports-upgrade-center-trailing-slash
+      priority: 1000
+      services:
+        - name: boldreports-upgrade-center
+          port: 80
+          serversTransport: long-timeouts-transport
+          {{- if $.Values.loadBalancer.affinityCookie.enable }}
+          sticky:
+            cookie:
+              name: bold.k8s.pod.id
+              maxAge: {{ default "600" $.Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
+          {{- end }}
+    {{- end }}
 {{- end }}
 {{- end }}

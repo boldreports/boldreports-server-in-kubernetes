@@ -1,0 +1,369 @@
+{{- if .Values.upgradeCenter.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: boldreports-upgrade-center
+{{ include "boldreports.namespace" . | indent 2 }}
+  labels:
+    helm.sh/chart: {{ .Chart.Name }}_{{ .Chart.Version }}
+    app.kubernetes.io/name: boldreports-upgrade-center
+    app.kubernetes.io/instance: {{ .Release.Name }}
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: boldreports-upgrade-center
+{{ include "boldreports.namespace" . | indent 2 }}
+  labels:
+    helm.sh/chart: {{ .Chart.Name }}_{{ .Chart.Version }}
+    app.kubernetes.io/name: boldreports-upgrade-center
+    app.kubernetes.io/instance: {{ .Release.Name }}
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    verbs:
+      - get
+      - create
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: boldreports-upgrade-center  
+{{ include "boldreports.namespace" . | indent 2 }}
+  labels:
+    helm.sh/chart: {{ .Chart.Name }}_{{ .Chart.Version }}
+    app.kubernetes.io/name: boldreports-upgrade-center
+    app.kubernetes.io/instance: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: boldreports-upgrade-center
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: boldreports-upgrade-center
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boldreports-upgrade-center-config
+{{ include "boldreports.namespace" . | indent 2 }}
+  labels:
+    helm.sh/chart: {{ .Chart.Name }}_{{ .Chart.Version }}
+    app.kubernetes.io/name: boldreports-upgrade-center
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- if .Chart.AppVersion }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    {{- end }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  releaseVersionsApiUrl: "https://boldbi-release-api.boldbidemo.com/reports/version/json"
+  idpApi: "http://id-api-service:6001/api"
+  ums: "http://id-ums-service:6002/ums"
+  playwrightRunnerImage: "sivakumar2809/boldreports-upgrade-center-qa:v2.1"
+  playwrightJobTimeoutSeconds: "9000"
+  playwrightCompletedJobTtlSeconds: "3600"
+  playwrightWorkers: "4"
+  playwrightJobCpuRequest: "2"
+  playwrightJobCpuLimit: "4"
+  playwrightJobMemoryRequest: "4Gi"
+  playwrightJobMemoryLimit: "6Gi"
+  playwrightSharedStateVolumeEnabled: "true"
+  playwrightSharedStateStorageClassName: ""
+  playwrightSharedStateStorageSize: "1Gi"
+  playwrightSharedStateAccessMode: "ReadWriteOnce"
+  playwrightSharedStateMountPath: "/app/playwright-shared-state"
+  playwrightSharedStateFsGroup: "1001"
+  playwrightPodHoldSeconds: "180"
+  playwrightPassRateThreshold: "40"
+  playwrightReportUploadBaseUrl: "http://boldreports-upgrade-center/upgrade-center/api/playwright-reports"
+  playwrightResultUploadBaseUrl: "http://boldreports-upgrade-center/upgrade-center/api/playwright-results"
+  productHealthCheckEnabled: "true"
+  productHealthCheckTimeoutSeconds: "300"
+  productHealthCheckPollSeconds: "10"
+  productHealthCheckRequestTimeoutSeconds: "10"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: boldreports-upgrade-center
+{{ include "boldreports.namespace" . | indent 2 }}
+  labels:
+    helm.sh/chart: {{ .Chart.Name }}_{{ .Chart.Version }}
+    app.kubernetes.io/name: boldreports-upgrade-center
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- if .Chart.AppVersion }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    {{- end }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.upgradeCenter.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: boldreports-upgrade-center
+      # app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: boldreports-upgrade-center
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: boldreports-upgrade-center
+      automountServiceAccountToken: true
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      containers:
+        - name: boldreports-upgrade-center
+          image: "{{ .Values.upgradeCenter.image.repo }}:{{ .Values.upgradeCenter.image.tag }}"
+          imagePullPolicy: {{ .Values.upgradeCenter.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - secretRef:
+                name: boldreports-upgrade-center-playwright
+                optional: true
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            - name: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+              value: "true"
+            - name: UpgradeCenter__ReleaseVersionsApiUrl
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: releaseVersionsApiUrl
+            - name: UpgradeCenter__ProductName
+              value: "Bold Reports"
+            - name: UpgradeCenter__Services__IdpApi
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: idpApi
+            - name: UpgradeCenter__Services__Ums
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: ums
+            - name: UpgradeCenter__Playwright__UseKubernetesJob
+              value: "true"
+            - name: UpgradeCenter__Playwright__RunnerImage
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightRunnerImage
+            - name: UpgradeCenter__Playwright__JobTimeoutSeconds
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightJobTimeoutSeconds
+            - name: UpgradeCenter__Playwright__CompletedJobTtlSeconds
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightCompletedJobTtlSeconds
+            - name: UpgradeCenter__Playwright__WorkerCount
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightWorkers
+            - name: UpgradeCenter__Playwright__JobCpuRequest
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightJobCpuRequest
+            - name: UpgradeCenter__Playwright__JobCpuLimit
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightJobCpuLimit
+            - name: UpgradeCenter__Playwright__JobMemoryRequest
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightJobMemoryRequest
+            - name: UpgradeCenter__Playwright__JobMemoryLimit
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightJobMemoryLimit
+            - name: UpgradeCenter__Playwright__SharedStateVolumeEnabled
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightSharedStateVolumeEnabled
+            - name: UpgradeCenter__Playwright__SharedStateStorageClassName
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightSharedStateStorageClassName
+            - name: UpgradeCenter__Playwright__SharedStateStorageSize
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightSharedStateStorageSize
+            - name: UpgradeCenter__Playwright__SharedStateAccessMode
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightSharedStateAccessMode
+            - name: UpgradeCenter__Playwright__SharedStateMountPath
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightSharedStateMountPath
+            - name: UpgradeCenter__Playwright__SharedStateFsGroup
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightSharedStateFsGroup
+            - name: PLAYWRIGHT_POD_HOLD_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightPodHoldSeconds
+            - name: UpgradeCenter__Playwright__PassRateThreshold
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightPassRateThreshold
+            - name: UpgradeCenter__Playwright__ReportUploadBaseUrl
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightReportUploadBaseUrl
+            - name: UpgradeCenter__Playwright__ResultUploadBaseUrl
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: playwrightResultUploadBaseUrl
+            - name: UpgradeCenter__ProductHealthCheck__Enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: productHealthCheckEnabled
+            - name: UpgradeCenter__ProductHealthCheck__TimeoutSeconds
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: productHealthCheckTimeoutSeconds
+            - name: UpgradeCenter__ProductHealthCheck__PollSeconds
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: productHealthCheckPollSeconds
+            - name: UpgradeCenter__ProductHealthCheck__RequestTimeoutSeconds
+              valueFrom:
+                configMapKeyRef:
+                  name: boldreports-upgrade-center-config
+                  key: productHealthCheckRequestTimeoutSeconds
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+          readinessProbe:
+            httpGet:
+              path: /upgrade-center/health-check
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /upgrade-center/health-check
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - mountPath: /app/App_Data
+              name: upgrade-center-volume
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: upgrade-center-volume
+          persistentVolumeClaim:
+            claimName: bold-fileserver-claim
+      {{- if .Values.tolerationEnable }}
+      tolerations:
+      {{- range .Values.tolerations }}
+        - key: {{ .key }}
+          operator: {{ .operator }}
+          value: {{ .value }}
+          effect: {{ .effect }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.nodeAffinityEnable }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: {{ .Values.nodeAffinity.key }}
+                    operator: {{ .Values.nodeAffinity.operator }}
+                    values:
+                      - {{ .Values.nodeAffinity.value }}
+      {{- end }}
+{{- end }}

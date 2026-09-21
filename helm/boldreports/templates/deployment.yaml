@@ -169,6 +169,8 @@ spec:
         {{- if eq $service.app "id-ums" }}
         - name: BOLD_SERVICES_USE_SITE_IDENTIFIER
           value: "true"
+        - name: BOLD_SERVICES_UPGRADECENTER_ENABLE
+          value: "{{ $.Values.upgradeCenter.enabled | default "false" }}"
         envFrom:
         - secretRef:
               name: bold-user-secret
