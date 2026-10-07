@@ -56,7 +56,7 @@ kind: VirtualService
 metadata:
   labels:
     {{- include "boldreports.labels" . | nindent 4 }}
-  {{- if .Values.istioConfig.virtualServiceName }}
+  {{- if and .Values.istioConfig .Values.istioConfig.virtualServiceName }}
   name: {{ .Values.istioConfig.virtualServiceName }}
   {{- else }}
   name: bold-virtual-service
@@ -73,7 +73,7 @@ spec:
   - {{ (split "/" .Values.appBaseUrl)._2 }}
   {{- end }}
   gateways:
-  {{- if .Values.istioConfig.gatewayName }}
+  {{- if and .Values.istioConfig .Values.istioConfig.gatewayName }}
   - {{ .Values.istioConfig.gatewayName }}
   {{- else }}
   - bold-gateway
@@ -156,6 +156,20 @@ spec:
     retries:
       attempts: 3
       retryOn: gateway-error,connect-failure,refused-stream
+  {{- if .Values.upgradeCenter.enabled }}
+  # Upgrade Center
+  - match:
+    - uri:
+        prefix: /upgrade-center
+    route:
+    - destination:
+        port:
+          number: 80
+        host: bold-upgrade-center
+    retries:
+      attempts: 3
+      retryOn: gateway-error,connect-failure,refused-stream
+  {{- end }}
   - match:
     - uri:
         prefix: /

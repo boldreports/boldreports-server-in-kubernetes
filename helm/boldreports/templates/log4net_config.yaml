@@ -37,7 +37,7 @@ data:
           <filter type="log4net.Filter.DenyAllFilter" />
           <appendToFile value="true" />
           <maxSizeRollBackups value="1" />
-          <maximumFileSize value="300KB" />
+          <maximumFileSize value="3000KB" />
           <rollingStyle value="Size" />
           <staticLogFileName value="true" />
           <layout type="log4net.Layout.PatternLayout">

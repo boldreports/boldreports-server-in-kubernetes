@@ -575,6 +575,31 @@ metadata:
         proxy_pass http://upstream_balancer;
         proxy_redirect                          off;
       }
+{{- if $.Values.upgradeCenter.enabled }}
+      location ~* "^/upgrade-center(/|$)(.*)" {
+          set $namespace      $boldreports_namespace;
+          set $ingress_name   "boldreports-ingress";
+          set $service_name   "";
+          set $service_port   "";
+          set $location_path  "/upgrade-center(/|${literal_dollar})(.*)";
+
+          rewrite_by_lua_block {
+              lua_ingress.rewrite({
+                  force_ssl_redirect = false,
+                  ssl_redirect = true,
+                  force_no_ssl_redirect = false,
+                  use_port_in_redirects = false,
+              })
+              balancer.rewrite()
+              plugins.run()
+          }
+
+          set $proxy_upstream_name "${boldreports_namespace}-bold-upgrade-center-80";
+
+          rewrite "(?i)^/upgrade-center(/|$)(.*)" /upgrade-center$1$2 break;
+          proxy_pass http://upstream_balancer;
+      }
+{{- end }}
 spec:
   {{- if and $ingressSupportsIngressClassName .Values.loadBalancer.ingressClassName }}
   ingressClassName: {{ .Values.loadBalancer.ingressClassName }}
@@ -737,4 +762,20 @@ spec:
               serviceName: bold-etl-service
               servicePort: 6009
               {{- end }}
+{{- if $.Values.upgradeCenter.enabled }}
+          - path: /upgrade-center(/|$)(.*)
+            {{- if $ingressSupportsPathType }}
+            pathType: {{ $ingressPathType }}
+            {{- end }}
+            backend:
+              {{- if $ingressApiIsStable }}
+              service:
+                name: bold-upgrade-center
+                port:
+                  number: 80
+              {{- else }}
+              serviceName: bold-upgrade-center
+              servicePort: 80
+              {{- end }}
+{{- end }}
 {{- end }}

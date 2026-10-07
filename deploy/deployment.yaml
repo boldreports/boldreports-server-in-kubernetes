@@ -129,6 +129,9 @@ spec:
         image: us-docker.pkg.dev/boldreports/multi-container/bold-ums:14.1.18
         ports:
         - containerPort: 80
+        env:
+        - name: BOLD_SERVICES_UPGRADE_CENTER_ENABLE
+          value: "false"
         resources:
           requests:
             cpu: 250m
