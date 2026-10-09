@@ -5,6 +5,10 @@
 {{- if .Values.subApplication.enabled }}
   {{- $subPath = printf "/%s" (.Values.subApplication.subPath | default "boldservices") }}
 {{- end }}
+{{- $upgradeCenterPath := "/upgrade-center" }}
+{{- if .Values.subApplication.enabled }}
+  {{- $upgradeCenterPath = printf "%s%s" $subPath "/upgrade-center" }}
+{{- end }}
 apiVersion: traefik.io/v1alpha1
 kind: ServersTransport
 metadata:
@@ -16,6 +20,19 @@ spec:
     responseHeaderTimeout: 300s
     idleConnTimeout: 300s
     readIdleTimeout: 300s
+{{- if .Values.upgradeCenter.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: bold-upgrade-center-trailing-slash
+  {{- include "boldreports.namespace" . | nindent 2 }}
+spec:
+  redirectRegex:
+    regex: ^(https?://[^/]+{{ $upgradeCenterPath }})$
+    replacement: ${1}/
+    permanent: true
+{{- end }}
 ---
 {{- if .Values.loadBalancer.enableGzip }}
 apiVersion: traefik.io/v1alpha1
@@ -236,10 +253,10 @@ spec:
         Host(`{{ $host }}`) && PathPrefix(`{{ printf "%s/reportsai" $subPath }}`)
         {{- end }}
       kind: Rule
+      {{- if $.Values.loadBalancer.enableGzip }}
       middlewares:
-        {{- if $.Values.loadBalancer.enableGzip }}
         - name: gzip-compress
-        {{- end }}
+      {{- end }}
       services:
         - name: reports-ai-service
           port: 6555
@@ -317,6 +334,27 @@ spec:
               name: bold.k8s.pod.id
               maxAge: {{ default "600" $.Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
           {{- end }}
+    {{- if $.Values.upgradeCenter.enabled }}
+    - match: |
+        {{- if $isIP }}
+        PathPrefix(`{{ $upgradeCenterPath }}`)
+        {{- else }}
+        Host(`{{ $host }}`) && PathPrefix(`{{ $upgradeCenterPath }}`)
+        {{- end }}
+      kind: Rule
+      middlewares:
+        - name: body-limit-200m
+        - name: bold-upgrade-center-trailing-slash
+      priority: 1000
+      services:
+        - name: bold-upgrade-center
+          port: 80
+          serversTransport: long-timeouts-transport
+          sticky:
+            cookie:
+              maxAge: {{ default "600" $.Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
+              name: bold.k8s.pod.id
+    {{- end }}
 ---
     {{- end }}  {{- /* end per-host */ -}}
   {{- end }}  {{- /* end per-group */ -}}
@@ -506,10 +544,10 @@ spec:
         Host(`{{ $baseHost }}`) && PathPrefix(`{{ printf "%s/reportsai" $subPath }}`)
         {{- end }}
       kind: Rule
-      middlewares:
-        {{- if .Values.loadBalancer.enableGzip }}
+      {{- if .Values.loadBalancer.enableGzip }}
+      middlewares: 
         - name: gzip-compress
-        {{- end }}
+      {{- end }}
       services:
         - name: reports-ai-service
           port: 6555
@@ -587,5 +625,26 @@ spec:
               name: bold.k8s.pod.id
               maxAge: {{ default "600" .Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
           {{- end }}
+    {{- if .Values.upgradeCenter.enabled }}
+    - match: |
+        {{- if $isIP }}
+        PathPrefix(`{{ $upgradeCenterPath }}`)
+        {{- else }}
+        Host(`{{ $baseHost }}`) && PathPrefix(`{{ $upgradeCenterPath }}`)
+        {{- end }}
+      kind: Rule
+      middlewares:
+        - name: body-limit-200m
+        - name: bold-upgrade-center-trailing-slash
+      priority: 1000
+      services:
+        - name: bold-upgrade-center
+          port: 80
+          serversTransport: long-timeouts-transport
+          sticky:
+            cookie:
+              maxAge: {{ default "600" .Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
+              name: bold.k8s.pod.id
+    {{- end }}
 {{- end }}
 {{- end }}

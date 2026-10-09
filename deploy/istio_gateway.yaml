@@ -137,6 +137,19 @@ spec:
     retries:
       attempts: 3
       retryOn: gateway-error,connect-failure,refused-stream
+  # Upgrade Center: Uncomment the following route to enable the Upgrade Center.
+  # Prerequisite: deploy the Upgrade Center manifests from deploy/bold-upgrade-center/
+  # - match:
+  #   - uri:
+  #       prefix: /upgrade-center
+  #   route:
+  #   - destination:
+  #       port:
+  #         number: 80
+  #       host: bold-upgrade-center.bold-services.svc.cluster.local
+  #   retries:
+  #     attempts: 3
+  #     retryOn: gateway-error,connect-failure,refused-stream
   - match:
     - uri:
         prefix: /

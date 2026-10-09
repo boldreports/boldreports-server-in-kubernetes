@@ -146,6 +146,15 @@ For Helm chart, you'll need to craft a `values.yaml`.
         Pod anti-affinity ensures that the pods are not scheduled into nodes with matching pods. Set this to true if you use pod anti-affinity in your cluster.
       </td>
     </tr>
+    <tr>
+      <td>
+        upgradeCenter.enabled
+      </td>
+      <td>
+        Set to <code>true</code> to deploy and enable the Upgrade Center service for Bold Reports. Default is <code>false</code>.<br /><br />
+        For full configuration options (credentials, resources, and validation settings), refer to the <a href="../docs/upgrade-center-deployment.md#deploy-upgrade-center-using-helm">Upgrade Center configuration guide</a>.
+      </td>
+    </tr>
 </table>
 <br/>
 
@@ -234,6 +243,82 @@ To use OCI storage, set `ociStorage.enabled: true`.
 </table>
 <br/>
 
+## Environment variables for configuring Upgrade Center
+
+The following environment variables are used to configure the Upgrade Center service for Bold Reports. Set `upgradeCenter.enabled: true` to deploy the service. For full deployment steps and configuration details, refer to the [Upgrade Center configuration guide](../docs/upgrade-center-deployment.md#deploy-upgrade-center-using-helm).
+
+<table>
+    <tr>
+      <td>
+       <b>Name</b>
+      </td>
+      <td>
+       <b>Description</b>
+      </td>
+    </tr>
+    <tr>
+      <td>
+       upgradeCenter.enabled
+      </td>
+      <td>
+       Set to <code>true</code> to deploy and enable the Upgrade Center service for Bold Reports. Default is <code>false</code>.
+      </td>
+    </tr>
+    <tr>
+      <td>
+       upgradeCenter.resources.requests.cpu
+      </td>
+      <td>
+       CPU request for Upgrade Center pods. Default is <code>250m</code>.
+      </td>
+    </tr>
+    <tr>
+      <td>
+       upgradeCenter.resources.requests.memory
+      </td>
+      <td>
+       Memory request for Upgrade Center pods. Default is <code>512Mi</code>.
+      </td>
+    </tr>
+    <tr>
+      <td>
+       upgradeCenter.resources.limits.cpu
+      </td>
+      <td>
+       CPU limit for Upgrade Center pods. Default is <code>1</code>.
+      </td>
+    </tr>
+    <tr>
+      <td>
+       upgradeCenter.resources.limits.memory
+      </td>
+      <td>
+       Memory limit for Upgrade Center pods. Default is <code>1536Mi</code>.
+      </td>
+    </tr>
+    <tr>
+      <td>
+       upgradeCenter.secret.adminUsername
+      </td>
+      <td>
+       Root user administrator username for Upgrade Center authentication. If not provided, the username from <code>rootUserDetails.email</code> will be used. This field is optional if <code>rootUserDetails</code> is already configured.
+      </td>
+    </tr>
+    <tr>
+      <td>
+       upgradeCenter.secret.adminPassword
+      </td>
+      <td>
+       Root user administrator password for Upgrade Center authentication. If not provided, the password from <code>rootUserDetails.password</code> will be used. This field is optional if <code>rootUserDetails</code> is already configured.
+      </td>
+    </tr>
+</table>
+<br/>
+
+> **StorageClass requirement:** Upgrade Center creates a temporary shared volume for validation state. The Kubernetes cluster must have a working default StorageClass and the matching CSI driver installed. If the default StorageClass cannot provision a volume, the validation pod remains in `Pending` state.
+
+<br/>
+
 Run the following command to delpoy Bold Reports in your cluster.
 
 ```console
@@ -244,6 +329,7 @@ Ex:  `helm install boldreports boldreports/boldreports -f my-values.yaml`
 Refer [here](docs/configuration.md) for advanced configuration including SSL termination, optional client libraries, etc.
 
 _See [helm install](https://helm.sh/docs/helm/helm_install/) for command documentation._
+
 
 ## Upgrade
 
@@ -295,3 +381,27 @@ _See [helm uninstall](https://helm.sh/docs/helm/helm_uninstall/) for command doc
 Configure the Bold Reports On-Premise application startup to use the application. Please refer the following link for more details on configuring the application startup.
     
 https://help.boldreports.com/enterprise-reporting/administrator-guide/application-startup/
+
+## Accessing Upgrade Center
+
+If you have enabled the Upgrade Center service (`upgradeCenter.enabled: true`), you can access it using the following URL:
+
+```
+https://<your-domain>/upgrade-center
+```
+
+**Requirements:**
+- The Upgrade Center must be enabled in your values.yaml configuration
+- You must be logged in with root administrator credentials
+- The Bold Reports application must be running and accessible
+- Proper network connectivity to the Upgrade Center ingress path
+
+**Disable Upgrade Center:**
+
+To disable the Upgrade Center service, set `upgradeCenter.enabled: false` in your values.yaml and run:
+
+```console
+helm upgrade [RELEASE_NAME] boldreports/boldreports -f [Crafted values.yaml file]
+```
+
+This will remove the Upgrade Center deployment, service, and ingress routes from your cluster.

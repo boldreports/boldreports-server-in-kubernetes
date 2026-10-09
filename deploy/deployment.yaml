@@ -129,6 +129,9 @@ spec:
         image: syncfusion/bold-ums:15.1.10
         ports:
         - containerPort: 80
+        env:
+        - name: BOLD_SERVICES_UPGRADE_CENTER_ENABLE
+          value: "false"
         resources:
           requests:
             cpu: 250m

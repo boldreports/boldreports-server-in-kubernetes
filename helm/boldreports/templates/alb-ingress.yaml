@@ -116,6 +116,22 @@ spec:
             name: id-ums-service
             port:
               number: 6002
+      {{- if .Values.upgradeCenter.enabled }}
+      - path: "/upgrade-center"
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: bold-upgrade-center
+            port:
+              number: 80
+      - path: "/upgrade-center/*"
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: bold-upgrade-center
+            port:
+              number: 80
+      {{- end }}
       - path: "/*"
         pathType: ImplementationSpecific
         backend:

@@ -134,6 +134,17 @@ spec:
                 name: bold-etl-service
                 port:
                   number: 6009
+                  
+{{- if .Values.upgradeCenter.enabled }}
+          # Upgrade Center
+          - path: /upgrade-center
+            pathType: Prefix
+            backend:
+              service:
+                name: bold-upgrade-center
+                port:
+                  number: 80
+{{- end }}
 
           # ID WEB (ROOT)
           - path: /

@@ -75,6 +75,22 @@ rules:
             name: reports-mcp-service
             port:
               number: 6556
+      # Upgrade Center: Uncomment the following two paths to enable the Upgrade Center.
+      # Prerequisite: deploy the Upgrade Center manifests from deploy/bold-upgrade-center/
+      # - path: "/upgrade-center"
+      #   pathType: ImplementationSpecific
+      #   backend:
+      #     service:
+      #       name: bold-upgrade-center
+      #       port:
+      #         number: 80
+      # - path: "/upgrade-center/*"
+      #   pathType: ImplementationSpecific
+      #   backend:
+      #     service:
+      #       name: bold-upgrade-center
+      #       port:
+      #         number: 80
       - path: "/reporting/*"
         pathType: ImplementationSpecific
         backend:
