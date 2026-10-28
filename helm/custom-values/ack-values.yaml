@@ -47,7 +47,7 @@ imagePullSecrets: []
 loadBalancer:
   type: traefik
   # ingresspathtype: Implementspecific
-  # ingressClassName: nginx
+  # ingressClassName: traefik
   affinityCookie:
     enable: true
     affinityCookieExpiration: 600
