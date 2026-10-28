@@ -83,8 +83,8 @@ imagePullSecrets: []
 
 
 loadBalancer:
-  type: nginx
-  # ingressClassName: nginx
+  type: traefik
+  # ingressClassName: traefik
   # gatewayName: 
   # gatewayNamespace: 
   affinityCookie:
