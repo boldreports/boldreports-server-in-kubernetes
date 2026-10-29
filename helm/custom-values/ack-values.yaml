@@ -3,7 +3,7 @@
 # Declare variables to be passed into your templates.
 namespace: bold-services
 appBaseUrl: ''
-optionalLibs: 'mysql,oracle,postgresql,snowflake'
+optionalLibs: 'postgresql,snowflake,mysql,oracle,googlebigquery,mongodb'
 clusterProvider: 'ack'
 
 persistentVolume:
@@ -45,9 +45,9 @@ image:
 imagePullSecrets: []
 
 loadBalancer:
-  type: nginx
+  type: traefik
   # ingresspathtype: Implementspecific
-  # ingressClassName: nginx
+  # ingressClassName: traefik
   affinityCookie:
     enable: true
     affinityCookieExpiration: 600
