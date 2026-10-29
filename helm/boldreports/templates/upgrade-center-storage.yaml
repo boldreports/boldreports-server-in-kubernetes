@@ -15,9 +15,7 @@
     (and (eq .Values.clusterProvider "ack")
       (ne (default "" .Values.persistentVolume.ack.serverName) ""))
     (and (eq .Values.clusterProvider "oke")
-      (or (ne (default "" .Values.persistentVolume.oke.volumeHandle) "")
-       (and .Values.persistentVolume.oke.blockVolume.blockVolumeEnable
-         (ne (default "" .Values.persistentVolume.oke.blockVolume.blockVolumeCapacity) ""))))
+      (ne (default "" .Values.persistentVolume.oke.volumeHandle) ""))
 }}
 {{- if and (or (eq (lower (trim (default "IdpIntegrated" .Values.upgradeCenter.integrationMode))) "standalone") (not $hasRealPV)) (ne $storage.source "FileSystem") }}
 apiVersion: v1

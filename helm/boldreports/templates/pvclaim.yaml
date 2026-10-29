@@ -13,9 +13,7 @@
     (and (eq $.Values.clusterProvider "ack")
          (ne (default "" $.Values.persistentVolume.ack.serverName) ""))
     (and (eq $.Values.clusterProvider "oke")
-         (or (ne (default "" $.Values.persistentVolume.oke.volumeHandle) "")
-             (and $.Values.persistentVolume.oke.blockVolume.blockVolumeEnable
-                  (ne (default "" $.Values.persistentVolume.oke.blockVolume.blockVolumeCapacity) ""))))
+         (ne (default "" $.Values.persistentVolume.oke.volumeHandle) ""))
 -}}
 {{- if and $hasRealPV (not .Values.persistentVolume.useExistingClaim) }}
 {{- if or (eq .Values.clusterProvider "eks") (eq .Values.clusterProvider "ack") (eq .Values.clusterProvider "onpremise") }}
@@ -103,7 +101,7 @@ spec:
    storage: {{ .Values.persistentVolume.capacity }}
  accessModes:
  - ReadWriteMany
- {{- if or (eq .Values.clusterProvider "eks") (eq .Values.clusterProvider "aks") (eq .Values.clusterProvider "ack") }}
+ {{- if or (eq .Values.clusterProvider "eks") (eq .Values.clusterProvider "aks") (eq .Values.clusterProvider "ack") (eq .Values.clusterProvider "oke") }}
  persistentVolumeReclaimPolicy: Retain
  {{- end }}
  {{- if eq .Values.clusterProvider "ack" }}
@@ -156,6 +154,12 @@ spec:
  nfs:
    path: /{{ .Values.persistentVolume.gke.fileShareName }}
    server: {{ .Values.persistentVolume.gke.fileShareIp }}
+ {{- else if eq .Values.clusterProvider "oke" }}
+ storageClassName: ""
+ volumeMode: {{ .Values.persistentVolume.oke.volumeMode | default "Filesystem" }}
+ csi:
+   driver: fss.csi.oraclecloud.com
+   volumeHandle: {{ .Values.persistentVolume.oke.volumeHandle }}
  {{- else if eq .Values.clusterProvider "ack" }}
  storageClassName : alibabacloud-cnfs-nas
  csi:
@@ -195,7 +199,7 @@ spec:
  storageClassName: azurefile
  {{- else if and (eq .Values.clusterProvider "aks") ( .Values.persistentVolume.aks.managedIdentity.fileShareName ) }}
  storageClassName: ""
- {{- else if eq .Values.clusterProvider "gke" }}
+ {{- else if or (eq .Values.clusterProvider "gke") (eq .Values.clusterProvider "oke") }}
  storageClassName: ""
  {{- end }}
  volumeName: {{ .Values.persistentVolume.name }} 

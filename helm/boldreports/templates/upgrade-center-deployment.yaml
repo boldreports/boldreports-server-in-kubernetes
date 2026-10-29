@@ -21,16 +21,13 @@
     (and (eq .Values.clusterProvider "ack")
       (ne (default "" .Values.persistentVolume.ack.serverName) ""))
     (and (eq .Values.clusterProvider "oke")
-      (or (ne (default "" .Values.persistentVolume.oke.volumeHandle) "")
-       (and .Values.persistentVolume.oke.blockVolume.blockVolumeEnable
-         (ne (default "" .Values.persistentVolume.oke.blockVolume.blockVolumeCapacity) ""))))
+      (ne (default "" .Values.persistentVolume.oke.volumeHandle) ""))
 }}
 {{- if and $usesFiles (not $hasRealPV) }}
 {{- fail "Filesystem Standalone Upgrade Center requires the product App_Data PVC. Configure persistentVolume for your cluster or set persistentVolume.useExistingClaim and claimName." }}
 {{- end }}
-{{- if and (not $hasRealPV) (eq $storage.source "FileSystem") }}
-{{- fail "Upgrade Center without a product PV requires the product's existing object-storage settings." }}
-{{- end }}
+{{- /* IdpIntegrated without a PV or object storage keeps its own data on an ephemeral emptyDir. */ -}}
+{{- $ephemeral := and (not $hasRealPV) (eq $storage.source "FileSystem") }}
 {{- if and $usesFiles .Values.persistentVolume.useExistingClaim (empty .Values.persistentVolume.claimName) }}
 {{- fail "persistentVolume.claimName is required when Standalone Upgrade Center uses an existing claim." }}
 {{- end }}
@@ -196,10 +193,13 @@ data:
   kubernetesCertificateAuthorityPath: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
   allowedImageRepository0: "us-docker.pkg.dev/boldreports/multi-container"
+  allowedImageRepository2: {{ .Values.image.reportsRepo | quote }}
   allowedImageRegistryHost0: "us-docker.pkg.dev"
 
   allowedImageRepository1: "us-central1-docker.pkg.dev/boldreports-dev/boldreports-dev-images"
   allowedImageRegistryHost1: "us-central1-docker.pkg.dev"
+  allowedImageRegistryHost2: "docker.io"
+  reportRetentionJobCount: "14"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -238,7 +238,13 @@ spec:
       automountServiceAccountToken: true
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
+      {{- if kindIs "string" .Values.imagePullSecrets }}
       - name: {{ .Values.imagePullSecrets }}
+      {{- else }}
+      {{- range .Values.imagePullSecrets }}
+      - name: {{ if kindIs "map" . }}{{ .name }}{{ else }}{{ . }}{{ end }}
+      {{- end }}
+      {{- end }}
       {{- end }}
       {{- if not $isStandalone }}
       initContainers:
@@ -259,10 +265,13 @@ spec:
               set -eu
 
               configuration_url="${IDP_API_URL%/}/configuration"
-              attempt=1
+              timeout_seconds=300
+              poll_interval_seconds=30
+              start_time="$(date +%s)"
 
-              while [ "$attempt" -le 10 ]; do
-                echo "Checking IDP configuration endpoint. Attempt ${attempt}/10."
+              while true; do
+                elapsed_seconds=$(($(date +%s) - start_time))
+                echo "Checking IDP configuration endpoint. Elapsed ${elapsed_seconds}/${timeout_seconds} seconds."
                 response_file="$(mktemp)"
                 status_code="$(curl -sS -o "$response_file" -w "%{http_code}" --connect-timeout 5 --max-time 10 "$configuration_url" || true)"
                 response_bytes="$(wc -c < "$response_file" | tr -d ' ')"
@@ -273,17 +282,25 @@ spec:
                   exit 0
                 fi
 
-                echo "IDP configuration endpoint is not ready. Status: ${status_code:-request_failed}. ResponseBytes: ${response_bytes}. Waiting 10 seconds before retry."
+                echo "IDP configuration endpoint is not ready. Status: ${status_code:-request_failed}. ResponseBytes: ${response_bytes}."
                 rm -f "$response_file"
 
-                if [ "$attempt" -lt 10 ]; then
-                  sleep 10
+                elapsed_seconds=$(($(date +%s) - start_time))
+                if [ "$elapsed_seconds" -ge "$timeout_seconds" ]; then
+                  break
                 fi
 
-                attempt=$((attempt + 1))
+                remaining_seconds=$((timeout_seconds - elapsed_seconds))
+                sleep_seconds="$poll_interval_seconds"
+                if [ "$remaining_seconds" -lt "$poll_interval_seconds" ]; then
+                  sleep_seconds="$remaining_seconds"
+                fi
+
+                echo "Waiting ${sleep_seconds} seconds before retry."
+                sleep "$sleep_seconds"
               done
 
-              echo "IDP configuration endpoint did not return a usable response after 10 attempts."
+              echo "IDP configuration endpoint did not return a usable response within ${timeout_seconds} seconds."
               exit 1
       {{- end }}
       containers:
@@ -314,7 +331,7 @@ spec:
                   name: bold-upgrade-center-config
                   key: integrationMode
             - name: BOLD_SERVICES_PV_USED
-              value: {{ $hasRealPV | quote }}
+              value: {{ or $hasRealPV $ephemeral | quote }}
             {{- if or $isStandalone (not $hasRealPV) }}
             {{- if not $usesFiles }}
             {{- range $name, $value := $storage.environment }}
@@ -503,6 +520,21 @@ spec:
                 configMapKeyRef:
                   name: bold-upgrade-center-config
                   key: allowedImageRegistryHost1
+            - name: UpgradeCenter__Kubernetes__AllowedImageRepositories__2
+              valueFrom:
+                configMapKeyRef:
+                  name: bold-upgrade-center-config
+                  key: allowedImageRepository2
+            - name: UpgradeCenter__Kubernetes__AllowedImageRegistryHosts__2
+              valueFrom:
+                configMapKeyRef:
+                  name: bold-upgrade-center-config
+                  key: allowedImageRegistryHost2
+            - name: UpgradeCenter__Playwright__ReportRetentionJobCount
+              valueFrom:
+                configMapKeyRef:
+                  name: bold-upgrade-center-config
+                  key: reportRetentionJobCount
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -540,10 +572,8 @@ spec:
             {{- end }}
             - name: tmp
               mountPath: /tmp
-            {{- if $hasRealPV }}
             - mountPath: /app/App_Data
               name: upgrade-center-volume
-            {{- end }}
       volumes:
         {{- if $usesFiles }}
         - name: product-app-data
@@ -557,8 +587,8 @@ spec:
         {{- end }}
         - name: tmp
           emptyDir: {}
-        {{- if $hasRealPV }}
         - name: upgrade-center-volume
+          {{- if $hasRealPV }}
           persistentVolumeClaim:
             {{- if $.Values.persistentVolume.useExistingClaim }}
             claimName: {{ $.Values.persistentVolume.claimName }}
@@ -566,7 +596,9 @@ spec:
             claimName: {{ printf "%s-claim" $.Values.persistentVolume.name }}
             {{- end }}
             readOnly: false
-        {{- end }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
       {{- if .Values.tolerationEnable }}
       tolerations:
       {{- range .Values.tolerations }}
