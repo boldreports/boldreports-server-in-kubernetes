@@ -52,12 +52,6 @@ persistentVolume:
       
   onpremise:
     hostPath: ''
-  oke:
-    # Specify your volume handle in this format: <FileSystemOCID>:<MountTargetIP>:<path>
-    volumeHandle: ''
-
-    # By default, Oracle filesystem volume uses 'Filesystem' mode. To use a different mode, set the volumeMode field accordingly
-    volumeMode: ''
 
   useExistingClaim: false
   claimName: ''

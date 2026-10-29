@@ -15,8 +15,10 @@
     (and (eq $.Values.clusterProvider "ack")
          (ne (default "" $.Values.persistentVolume.ack.serverName) ""))
     (and (eq $.Values.clusterProvider "oke")
-         (ne (default "" $.Values.persistentVolume.oke.volumeHandle) ""))
-}}
+         (or (ne (default "" $.Values.persistentVolume.oke.volumeHandle) "")
+             (and $.Values.persistentVolume.oke.blockVolume.blockVolumeEnable
+                  (ne (default "" $.Values.persistentVolume.oke.blockVolume.blockVolumeCapacity) ""))))
+-}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

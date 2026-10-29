@@ -21,8 +21,6 @@
         (ne (default "" .Values.persistentVolume.gke.fileShareName) "")))
     (and (eq .Values.clusterProvider "ack")
       (ne (default "" .Values.persistentVolume.ack.serverName) ""))
-    (and (eq .Values.clusterProvider "oke")
-      (ne (default "" .Values.persistentVolume.oke.volumeHandle) ""))
 }}
 {{- if and $usesFiles (not $hasRealPV) }}
 {{- fail "Filesystem Standalone Upgrade Center requires the product App_Data PVC. Configure persistentVolume for your cluster or set persistentVolume.useExistingClaim and claimName." }}

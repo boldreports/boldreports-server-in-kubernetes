@@ -15,8 +15,6 @@
         (ne (default "" .Values.persistentVolume.gke.fileShareName) "")))
     (and (eq .Values.clusterProvider "ack")
       (ne (default "" .Values.persistentVolume.ack.serverName) ""))
-    (and (eq .Values.clusterProvider "oke")
-      (ne (default "" .Values.persistentVolume.oke.volumeHandle) ""))
 }}
 {{- if and (or (eq (lower (trim (default "IdpIntegrated" .Values.upgradeCenter.integrationMode))) "standalone") (not $hasRealPV)) (ne $storage.source "FileSystem") }}
 apiVersion: v1
