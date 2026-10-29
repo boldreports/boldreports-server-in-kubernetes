@@ -2,7 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 namespace: bold-services
-appBaseUrl: ''
+appBaseUrl: 'postgresql,snowflake,mysql,oracle,googlebigquery,mongodb'
 optionalLibs: 'mysql,oracle,postgresql,snowflake'
 clusterProvider: 'eks'
 
@@ -50,9 +50,9 @@ image:
 imagePullSecrets: []
 
 loadBalancer:
-  type: nginx
+  type: traefik
   # ingresspathtype: Implementspecific
-  # ingressClassName: nginx
+  # ingressClassName: traefik
   affinityCookie:
     enable: true
     affinityCookieExpiration: 600
