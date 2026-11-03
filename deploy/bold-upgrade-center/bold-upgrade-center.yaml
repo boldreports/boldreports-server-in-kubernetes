@@ -116,6 +116,8 @@ data:
   allowedImageRepository1: "us-central1-docker.pkg.dev/boldreports-dev/boldreports-dev-images"
   allowedImageRegistryHost0: "us-docker.pkg.dev"
   allowedImageRegistryHost1: "us-central1-docker.pkg.dev"
+  allowedImageRepository2: "syncfusion"
+  allowedImageRegistryHost2: "docker.io"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -134,8 +136,6 @@ spec:
       labels:
         app.kubernetes.io/name: bold-upgrade-center
     spec:
-      imagePullSecrets:
-        - name: dev-imagepull-secret
       serviceAccountName: bold-upgrade-center
       automountServiceAccountToken: true
       initContainers:
@@ -173,7 +173,7 @@ spec:
               esac
 
               configuration_url="${IDP_API_URL%/}/configuration"
-              timeout_seconds=180
+              timeout_seconds=300
               poll_interval_seconds=30
               start_time="$(date +%s)"
 
@@ -212,7 +212,7 @@ spec:
               exit 1
       containers:
         - name: bold-upgrade-center
-          image: bold-upgrade-center-dev:v3.0.0
+          image: docker.io/syncfusion/bold-upgrade-center:1.0.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -411,6 +411,16 @@ spec:
                 configMapKeyRef:
                   name: bold-upgrade-center-config
                   key: allowedImageRegistryHost1
+            - name: UpgradeCenter__Kubernetes__AllowedImageRepositories__2
+              valueFrom:
+                configMapKeyRef:
+                  name: bold-upgrade-center-config
+                  key: allowedImageRepository2
+            - name: UpgradeCenter__Kubernetes__AllowedImageRegistryHosts__2
+              valueFrom:
+                configMapKeyRef:
+                  name: bold-upgrade-center-config
+                  key: allowedImageRegistryHost2
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
