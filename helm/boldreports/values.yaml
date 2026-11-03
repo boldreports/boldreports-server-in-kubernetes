@@ -53,6 +53,28 @@ persistentVolume:
   onpremise:
     hostPath: ''
 
+  useExistingClaim: false
+  claimName: ''
+
+# Object-storage alternatives to the product filesystem PVC.
+s3Storage:
+  enabled: false
+  bucketName: ''
+  region: ''
+  rootFolderName: ''
+  accessKey: ''
+  secretKey: ''
+  storageType: 3
+
+azureStorage:
+  enabled: false
+  accountName: ''
+  containerName: ''
+  connectionType: Https
+  storageUri: ''
+  accessKey: ''
+  storageType: 1
+
 # For OCI configuration, set enabled as true.
 ociStorage:
   # Enable OCI storage backend (required: set to true to use OCI)
@@ -288,6 +310,8 @@ licenseKeyDetails:
 upgradeCenter:
   # Set this to true to deploy the Upgrade Center service for Bold Reports. Set it to false to skip Upgrade Center resources.
   enabled: false
+  # IdpIntegrated preserves existing SSO; Standalone uses product storage and local login.
+  integrationMode: IdpIntegrated
   # Root User administrator credentials used by Upgrade Center validation jobs.
   # 
   # Credentials provided under rootUserDetails take priority. These values are used only when rootUserDetails is empty.
