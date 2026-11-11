@@ -1,0 +1,42 @@
+{{- /*
+Optional PodDisruptionBudget per service. Global settings in .Values.podDisruptionBudget,
+overridden per service by instanceConfig[].podDisruptionBudget. Keys are resolved with hasKey
+(not merge) so per-service `enabled: false` and `maxUnavailable: 0` are honoured.
+*/}}
+{{- range $service := .Values.instanceConfig }}
+{{- $g := $.Values.podDisruptionBudget | default dict }}
+{{- $s := $service.podDisruptionBudget | default dict }}
+{{- $enabled := ternary $s.enabled $g.enabled (hasKey $s "enabled") }}
+{{- if $enabled }}
+{{- $useMin := or (hasKey $s "minAvailable") (and (not (hasKey $s "maxUnavailable")) (hasKey $g "minAvailable")) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    helm.sh/chart: {{ $.Chart.Name }}_{{ $.Chart.Version }}
+    app.kubernetes.io/name: {{ $service.app }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+  name: {{ $service.app }}-pdb
+  {{- if eq $.Release.Namespace "default" }}
+  namespace: {{ $.Values.namespace }}
+  {{- else }}
+  namespace: {{ $.Release.Namespace }}
+  {{- end }}
+spec:
+  {{- if $useMin }}
+  minAvailable: {{ ternary $s.minAvailable $g.minAvailable (hasKey $s "minAvailable") }}
+  {{- else if hasKey $s "maxUnavailable" }}
+  maxUnavailable: {{ $s.maxUnavailable }}
+  {{- else if hasKey $g "maxUnavailable" }}
+  maxUnavailable: {{ $g.maxUnavailable }}
+  {{- else }}
+  maxUnavailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $service.app }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+---
+{{- end }}
+{{- end }}

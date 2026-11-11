@@ -18,7 +18,7 @@
          (or (ne (default "" $.Values.persistentVolume.oke.volumeHandle) "")
              (and $.Values.persistentVolume.oke.blockVolume.blockVolumeEnable
                   (ne (default "" $.Values.persistentVolume.oke.blockVolume.blockVolumeCapacity) ""))))
--}}
+}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,7 +41,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: {{ $service.app }}
       app.kubernetes.io/instance: {{ $.Release.Name }}
-  {{- if not $.Values.autoscaling.enabled }}
+  {{- if or (not $.Values.autoscaling.enabled) (eq (toString $service.hpaEnabled) "false") }}
   replicas: {{ $service.replicaCount }}
   {{- end }}
   template:
@@ -49,7 +49,44 @@ spec:
       labels:
         app.kubernetes.io/name: {{ $service.app }}
         app.kubernetes.io/instance: {{ $.Release.Name }}
+        {{- with (merge (dict) ($service.podLabels | default dict) ($.Values.podLabels | default dict)) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with (merge (dict) ($service.podAnnotations | default dict) ($.Values.podAnnotations | default dict)) }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      {{- with ($service.podSecurityContext | default $.Values.podSecurityContext) }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($service.terminationGracePeriodSeconds | default $.Values.terminationGracePeriodSeconds) }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
+      {{- with ($service.priorityClassName | default $.Values.priorityClassName) }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with (merge (dict) ($service.nodeSelector | default dict) ($.Values.nodeSelector | default dict)) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($service.topologySpreadConstraints | default $.Values.topologySpreadConstraints) }}
+      topologySpreadConstraints:
+      {{- range . }}
+      - maxSkew: {{ .maxSkew | default 1 }}
+        topologyKey: {{ .topologyKey | default "kubernetes.io/hostname" }}
+        whenUnsatisfiable: {{ .whenUnsatisfiable | default "ScheduleAnyway" }}
+        labelSelector:
+          {{- if .labelSelector }}
+          {{- toYaml .labelSelector | nindent 10 }}
+          {{- else }}
+          matchLabels:
+            app.kubernetes.io/name: {{ $service.app }}
+            app.kubernetes.io/instance: {{ $.Release.Name }}
+          {{- end }}
+      {{- end }}
+      {{- end }}
       {{- if ne $service.app "id-web" }}
       initContainers:
       - name: id-web-initialization
@@ -64,15 +101,29 @@ spec:
         {{- else }}
         args: ["echo 'Waiting for id-web service...'; while ! nc -z id-web-service 6000; do echo 'Still waiting...'; sleep 10; done; echo 'id-web is ready'"]
         {{- end }}
+        {{- with ($service.containerSecurityContext | default $.Values.containerSecurityContext) }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $.Values.initContainerResources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         {{- if $hasRealPV }}
         volumeMounts:
         - mountPath: /application/app_data
           name: {{ $service.app }}-volume
         {{- end }}
       {{- end }}
-      {{- if $.Values.imagePullSecrets }}
+      {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
-      - name: {{ $.Values.imagePullSecrets }}
+      {{- if kindIs "string" . }}
+      - name: {{ . }}
+      {{- else }}
+      {{- range . }}
+      - name: {{ if kindIs "map" . }}{{ .name }}{{ else }}{{ . }}{{ end }}
+      {{- end }}
+      {{- end }}
       {{- end }}
       containers:
       - name: {{ $service.app }}-container
@@ -99,13 +150,26 @@ spec:
         {{- else if eq $service.app "reports-mcp" }}
         image: "{{ $.Values.image.reportsRepo }}/boldreports-mcp-server:{{ $.Values.image.reportsTag }}"
         {{- end }}
-        imagePullPolicy: Always
+        imagePullPolicy: {{ $.Values.image.pullPolicy | default "Always" }}
+        {{- with ($service.containerSecurityContext | default $.Values.containerSecurityContext) }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         ports:
         - containerPort: 80
         resources:
           requests:
             cpu: {{ $service.cpuResourceRequests }}
             memory: {{ $service.memoryResourceRequests }}
+          {{- if or $service.cpuResourceLimits $service.memoryResourceLimits }}
+          limits:
+            {{- with $service.cpuResourceLimits }}
+            cpu: {{ . }}
+            {{- end }}
+            {{- with $service.memoryResourceLimits }}
+            memory: {{ . }}
+            {{- end }}
+          {{- end }}
         env:
         - name: BOLD_SERVICES_HOSTING_ENVIRONMENT
           value: k8s
@@ -177,7 +241,15 @@ spec:
           value: "true"
         - name: BOLD_SERVICES_UPGRADE_CENTER_ENABLE
           value: "{{ $.Values.upgradeCenter.enabled | default "false" }}"
+        {{- end }}
+        {{- /* Global extraEnv first, then per-service env, so a service can override a global value. */}}
+        {{- with (concat ($.Values.extraEnv | default list) ($service.env | default list)) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- $extraEnvFrom := concat ($.Values.extraEnvFrom | default list) ($service.envFrom | default list) }}
+        {{- if or (eq $service.app "id-ums") $extraEnvFrom }}
         envFrom:
+        {{- if eq $service.app "id-ums" }}
         - secretRef:
               name: bold-user-secret
         - secretRef:
@@ -188,18 +260,37 @@ spec:
               name: branding-config
               optional: true
         {{- end }}
+        {{- with $extraEnvFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
+        {{- $readiness := $service.readinessProbe | default $.Values.readinessProbe | default dict }}
         readinessProbe:
           httpGet:
             path: /health-check
             port: 80
-          {{- if eq $service.app "id-web" }}
-          initialDelaySeconds: 60
-          {{- else }}
-          initialDelaySeconds: 60
+          initialDelaySeconds: {{ $readiness.initialDelaySeconds | default 60 }}
+          periodSeconds: {{ $readiness.periodSeconds | default 10 }}
+          timeoutSeconds: {{ $readiness.timeoutSeconds | default 10 }}
+          {{- with $readiness.failureThreshold }}
+          failureThreshold: {{ . }}
           {{- end }}
-          periodSeconds: 10
-          timeoutSeconds: 10
+        {{- with ($service.livenessProbe | default $.Values.livenessProbe) }}
+        {{- if .enabled }}
+        livenessProbe:
+          {{- toYaml (omit . "enabled") | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        {{- with ($service.startupProbe | default $.Values.startupProbe) }}
+        {{- if .enabled }}
+        startupProbe:
+          {{- toYaml (omit . "enabled") | nindent 10 }}
+        {{- end }}
+        {{- end }}
         volumeMounts:
+        {{- with (concat ($.Values.extraVolumeMounts | default list) ($service.extraVolumeMounts | default list)) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- if $hasRealPV }}
         - mountPath: /application/app_data
           name: {{ $service.app }}-volume
@@ -242,8 +333,13 @@ spec:
       - name: log4net-config-volume
         configMap:
           name: log4net-config
-      {{- if $.Values.tolerationEnable }}
+      {{- with (concat ($.Values.extraVolumes | default list) ($service.extraVolumes | default list)) }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- $serviceTolerations := $service.tolerations | default list }}
+      {{- if or $.Values.tolerationEnable $serviceTolerations }}
       tolerations:
+        {{- if $.Values.tolerationEnable }}
         {{- range $.Values.tolerations }}
         - key: "{{ .key }}"
           operator: "{{ .operator }}"
@@ -252,7 +348,16 @@ spec:
           {{- end }}
           effect: "{{ .effect }}"
         {{- end }}
+        {{- end }}
+        {{- with $serviceTolerations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
+      {{- /* A raw affinity block (per service, else global) replaces the *AffinityEnable toggles below. */}}
+      {{- with ($service.affinity | default $.Values.affinity) }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- else }}
       {{- if or $.Values.nodeAffinityEnable $.Values.podAffinityEnable $.Values.podAntiAffinityEnable}}
       affinity:
         {{- if $.Values.nodeAffinityEnable }}
@@ -260,11 +365,15 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
+              {{- if $.Values.nodeAffinity.matchExpressions }}
+              {{- toYaml $.Values.nodeAffinity.matchExpressions | nindent 14 }}
+              {{- else }}
               - key: "{{ $.Values.nodeAffinity.key }}"
                 operator: "{{ $.Values.nodeAffinity.operator }}"
                 values:
                 - "{{ $.Values.nodeAffinity.value }}"
-        {{- end }} 
+              {{- end }}
+        {{- end }}
         {{- if $.Values.podAffinityEnable }}
         podAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -278,15 +387,29 @@ spec:
         {{- end }}
         {{- if $.Values.podAntiAffinityEnable }}
         podAntiAffinity:
+          {{- if eq ($.Values.podAntiAffinityType | default "required") "preferred" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: "app.kubernetes.io/name"
+                  operator: "In"
+                  values:
+                  - "{{ $service.app }}"
+              topologyKey: "kubernetes.io/hostname"
+          {{- else }}
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
-              - key: "app.kubernetes.io/name" 
+              - key: "app.kubernetes.io/name"
                 operator: "In"
                 values:
                 - "{{ $service.app }}"
-            topologyKey: "kubernetes.io/hostname"   
-        {{- end }}                
+            topologyKey: "kubernetes.io/hostname"
+          {{- end }}
+        {{- end }}
+      {{- end }}
       {{- end }}
 ---
 {{- end }}

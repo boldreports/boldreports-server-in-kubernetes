@@ -100,7 +100,9 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   idTag: 15.1.10
   reportsTag: 15.1.10
-  pullPolicy: IfNotPresent
+  # Applied to all Bold service containers. (The 15.1.10 template hard-coded Always and
+  # ignored this value; Always keeps that behaviour.)
+  pullPolicy: Always
 imagePullSecrets: []
 
 
@@ -360,3 +362,120 @@ podAffinityEnable: false
 # Pod anti-affinity ensures that the pods are not scheduled into nodes with matching pods.
 # Set this to true if you use pod AntiAffinity in your cluster.
 podAntiAffinityEnable: false
+
+# Set to "preferred" to spread replicas across nodes on a best-effort basis instead of
+# refusing to schedule when no other node is free (only used with podAntiAffinityEnable: true).
+podAntiAffinityType: required
+
+# ---------------------------------------------------------------------------------------
+# Pod customisation. All settings below are optional and empty by default, so the rendered
+# manifests are unchanged unless you set them. Unless stated otherwise each setting can be
+# given globally here and overridden per service under instanceConfig[] with the same key.
+# ---------------------------------------------------------------------------------------
+
+# Extra pod annotations / labels, e.g. karpenter.sh/do-not-disrupt, Datadog/Prometheus tags.
+# Per-service values are merged over the global ones.
+podAnnotations: {}
+podLabels: {}
+
+# Extra environment variables for the main container, e.g. .NET runtime tuning:
+#   - name: DOTNET_gcServer
+#     value: "0"
+#   - name: DOTNET_GCHeapHardLimitPercent
+#     value: "0x46"          # 70% of the container memory limit (hex)
+# Global entries are rendered first, then instanceConfig[].env (so a service can override).
+extraEnv: []
+# Extra envFrom sources (secretRef / configMapRef) for every service; per service: envFrom.
+extraEnvFrom: []
+
+# Extra volumes / mounts, e.g. custom fonts or a writable /tmp with readOnlyRootFilesystem.
+# Global and per-service (extraVolumes / extraVolumeMounts) lists are concatenated.
+extraVolumes: []
+extraVolumeMounts: []
+
+# Pod and container securityContext (container settings also apply to the init container).
+# Example for Pod Security Standards "restricted" (verify the images support it first):
+#   podSecurityContext:
+#     runAsNonRoot: true
+#     seccompProfile:
+#       type: RuntimeDefault
+#   containerSecurityContext:
+#     allowPrivilegeEscalation: false
+#     capabilities:
+#       drop: ["ALL"]
+podSecurityContext: {}
+containerSecurityContext: {}
+
+# Resources for the id-web-initialization init container (otherwise namespace defaults apply).
+initContainerResources: {}
+
+# Raw affinity block. When set (globally or per service) it replaces nodeAffinityEnable /
+# podAffinityEnable / podAntiAffinityEnable for that pod.
+affinity: {}
+# nodeAffinity (above) also accepts a list of expressions instead of key/operator/value:
+#   nodeAffinity:
+#     matchExpressions:
+#       - key: karpenter.sh/capacity-type
+#         operator: In
+#         values: ["on-demand"]
+#       - key: kubernetes.io/arch
+#         operator: In
+#         values: ["amd64"]
+
+nodeSelector: {}
+
+# Spread replicas across nodes/zones. labelSelector defaults to the service's own pods.
+#   topologySpreadConstraints:
+#     - maxSkew: 1
+#       topologyKey: kubernetes.io/hostname
+#       whenUnsatisfiable: ScheduleAnyway
+topologySpreadConstraints: []
+
+priorityClassName: ""
+# Seconds to let in-flight requests (exports, report rendering) finish on shutdown.
+terminationGracePeriodSeconds:
+
+# PodDisruptionBudget per service, protecting in-flight work from voluntary evictions
+# (node drains, cluster-autoscaler / Karpenter consolidation). Per service override:
+#   instanceConfig:
+#     - app: reports-api
+#       podDisruptionBudget:
+#         enabled: true
+#         maxUnavailable: 0
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
+
+# Readiness probe timings (the probe itself is always rendered, as before).
+readinessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 10
+
+# Optional liveness / startup probes (disabled by default).
+livenessProbe:
+  enabled: false
+  httpGet:
+    path: /health-check
+    port: 80
+  initialDelaySeconds: 120
+  periodSeconds: 20
+  timeoutSeconds: 10
+  failureThreshold: 6
+startupProbe:
+  enabled: false
+  httpGet:
+    path: /health-check
+    port: 80
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 60
+
+# Additional per-service keys accepted under instanceConfig[]:
+#   cpuResourceLimits / memoryResourceLimits  rendered as resources.limits when set
+#   hpaEnabled: false                         skip the HPA and use replicaCount for this service
+#   tolerations: [...]                        appended to the global tolerations
+#   podAnnotations, podLabels, env, envFrom, extraVolumes, extraVolumeMounts,
+#   podSecurityContext, containerSecurityContext, affinity, nodeSelector,
+#   topologySpreadConstraints, priorityClassName, terminationGracePeriodSeconds,
+#   podDisruptionBudget, readinessProbe, livenessProbe, startupProbe

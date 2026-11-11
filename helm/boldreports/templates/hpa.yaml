@@ -1,5 +1,6 @@
 {{- if .Values.autoscaling.enabled }}
 {{- range $service := .Values.instanceConfig}}
+{{- if ne (toString $service.hpaEnabled) "false" }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -54,5 +55,6 @@ spec:
         periodSeconds: {{ $.Values.autoscaling.behavior.percentPeriodSeconds }}
   {{- end }}
 ---
+{{- end }}
 {{- end }}
 {{- end }}
