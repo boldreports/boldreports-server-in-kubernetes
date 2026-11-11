@@ -38,6 +38,8 @@ spec:
           name: bold.k8s.reports.reportservice.pod.id
           {{- else if eq $service.app "reports-viewer" }}
           name: bold.k8s.reports.viewer.pod.id
+          {{- else if eq $service.app "reports-export" }}
+          name: bold.k8s.reports.export.pod.id
           {{- else if eq $service.app "bold-etl" }}
           name: bold.k8s.bold.etl.pod.id
           {{- end }}          

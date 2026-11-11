@@ -114,6 +114,20 @@ apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
 metadata:
   namespace: <namespace>
+  name: reports-export-rule
+spec:
+  host: reports-export-service.bold-services.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      consistentHash:
+        httpCookie:
+          name: boldreports.k8s.reports.export.pod.id
+          ttl: 600s
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  namespace: <namespace>
   name: bold-etl-rule
 spec:
   host: bold-etl-service.bold-services.svc.cluster.local

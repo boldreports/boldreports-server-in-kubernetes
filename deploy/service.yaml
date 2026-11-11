@@ -184,3 +184,21 @@ spec:
     protocol: TCP
   selector:
     app: reports-mcp
+
+--- 
+apiVersion: v1
+kind: Service
+metadata:
+  name: reports-export-service
+  namespace: bold-services  
+  labels:
+    app: reports-export
+spec:
+  type: NodePort
+  ports:
+  - name: reports-export-port
+    port: 6557
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: reports-export

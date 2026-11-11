@@ -84,6 +84,17 @@ spec:
       retryOn: gateway-error,connect-failure,refused-stream
   - match:
     - uri:
+        prefix: /reporting/export
+    route:
+    - destination:
+        port:
+          number: 6557
+        host: reports-export-service.bold-services.svc.cluster.local
+    retries:
+      attempts: 3
+      retryOn: gateway-error,connect-failure,refused-stream
+  - match:
+    - uri:
         prefix: /reporting
     route:
     - destination:

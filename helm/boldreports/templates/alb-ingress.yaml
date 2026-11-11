@@ -81,6 +81,13 @@ spec:
             name: reports-viewer-service
             port:
               number: 6554
+      - path: "/reporting/export/*"
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: reports-export-service
+            port:
+              number: 6557
       - path: "/reporting/api/*"
         pathType: ImplementationSpecific
         backend:

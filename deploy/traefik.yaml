@@ -167,6 +167,20 @@ spec:
             cookie:
               name: bold.k8s.pod.id
               maxAge: 600
+    # - match: Host(`example.com`) && PathPrefix(`/reporting/export`)
+    - match: PathPrefix(`/reporting/export`)
+      kind: Rule
+      middlewares:
+        - name: gzip-compress
+        - name: body-limit-200m
+      services:
+        - name: reports-export-service
+          port: 6557
+          serversTransport: long-timeouts-transport
+          sticky:
+            cookie:
+              name: bold.k8s.pod.id
+              maxAge: 600
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

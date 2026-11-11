@@ -246,6 +246,29 @@ spec:
               name: bold.k8s.pod.id
               maxAge: {{ default "600" $.Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
           {{- end }}
+
+    - match: |
+        {{- if $isIP }}
+        PathPrefix(`{{ printf "%s/reporting/export" $subPath }}`)
+        {{- else }}
+        Host(`{{ $host }}`) && PathPrefix(`{{ printf "%s/reporting/export" $subPath }}`)
+        {{- end }}
+      kind: Rule
+      middlewares:
+        {{- if $.Values.loadBalancer.enableGzip }}
+        - name: gzip-compress
+        {{- end }}
+        - name: body-limit-200m
+      services:
+        - name: reports-export-service
+          port: 6557
+          serversTransport: long-timeouts-transport
+          {{- if $.Values.loadBalancer.affinityCookie.enable }}
+          sticky:
+            cookie:
+              name: bold.k8s.pod.id
+              maxAge: {{ default "600" $.Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
+          {{- end }}
     - match: |
         {{- if $isIP }}
         PathPrefix(`{{ printf "%s/reportsai" $subPath }}`)
@@ -530,6 +553,29 @@ spec:
       services:
         - name: reports-viewer-service
           port: 6554
+          serversTransport: long-timeouts-transport
+          {{- if .Values.loadBalancer.affinityCookie.enable }}
+          sticky:
+            cookie:
+              name: bold.k8s.pod.id
+              maxAge: {{ default "600" .Values.loadBalancer.affinityCookie.affinityCookieExpiration }}
+          {{- end }}
+
+    - match: |
+        {{- if $isIP }}
+        PathPrefix(`{{ printf "%s/reporting/export" $subPath }}`)
+        {{- else }}
+        Host(`{{ $baseHost }}`) && PathPrefix(`{{ printf "%s/reporting/export" $subPath }}`)
+        {{- end }}
+      kind: Rule
+      middlewares:
+        {{- if .Values.loadBalancer.enableGzip }}
+        - name: gzip-compress
+        {{- end }}
+        - name: body-limit-200m
+      services:
+        - name: reports-export-service
+          port: 6557
           serversTransport: long-timeouts-transport
           {{- if .Values.loadBalancer.affinityCookie.enable }}
           sticky:

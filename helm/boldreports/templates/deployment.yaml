@@ -92,6 +92,8 @@ spec:
         image: "{{ $.Values.image.reportsRepo }}/boldreports-designer:{{ $.Values.image.reportsTag }}"
         {{- else if eq $service.app "reports-viewer" }}
         image: "{{ $.Values.image.reportsRepo }}/boldreports-viewer:{{ $.Values.image.reportsTag }}"
+        {{- else if eq $service.app "reports-export" }}
+        image: "{{ $.Values.image.reportsRepo }}/boldreports-export:{{ $.Values.image.reportsTag }}"
         {{- else if eq $service.app "bold-etl" }}
         image: "{{ $.Values.image.reportsRepo }}/bold-etl:{{ $.Values.image.reportsTag }}"
         {{- else if eq $service.app "reports-ai" }}
@@ -220,6 +222,8 @@ spec:
         - mountPath: /application/reporting/reportservice/logs
         {{- else if eq $service.app "reports-viewer" }}
         - mountPath: /application/reporting/viewer/logs
+        {{- else if eq $service.app "reports-export" }}
+        - mountPath: /application/reporting/export/logs
         {{- else if eq $service.app "bold-etl" }}
         - mountPath: /application/etl/etlservice/logs/k8s
         {{- else if eq $service.app "reports-ai" }}
