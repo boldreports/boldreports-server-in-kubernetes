@@ -5,6 +5,13 @@ instanceConfig. Gateway API matches the longest PathPrefix, so rule order does n
 */}}
 {{- if and .Values.gatewayApi .Values.gatewayApi.enabled }}
 {{- $gw := .Values.gatewayApi }}
+{{- /* The loadBalancer.type templates would expose Bold a second time, and fail to install where
+       their CRDs (Traefik, Kong, Istio, Azure ALB) don't exist. */}}
+{{- $lbType := (.Values.loadBalancer | default dict).type | default "" }}
+{{- if and (has $lbType (list "nginx" "traefik" "alb" "istio" "kong" "azure-alb")) (not $gw.allowLoadBalancer) }}
+{{- fail (printf "gatewayApi.enabled renders its own HTTPRoute: set loadBalancer.type: none (currently %q), or gatewayApi.allowLoadBalancer: true to render both while migrating" $lbType) }}
+{{- end }}
+{{- $persistence := $gw.sessionPersistence | default dict }}
 {{- $apps := list }}
 {{- range .Values.instanceConfig }}{{ $apps = append $apps .app }}{{ end }}
 {{- $routes := list
@@ -73,6 +80,18 @@ spec:
     {{- with $timeouts }}
     timeouts:
       {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if $persistence.enabled }}
+    {{- /* One cookie per service: implementations such as Envoy store the backend address in the
+           cookie, so a shared name would be overwritten whenever the browser calls another service. */}}
+    sessionPersistence:
+      sessionName: {{ printf "%s%s" ($persistence.cookieNamePrefix | default "bold.k8s.") .app | quote }}
+      type: Cookie
+      {{- with $persistence.absoluteTimeout }}
+      absoluteTimeout: {{ . }}
+      cookieConfig:
+        lifetimeType: Permanent
+      {{- end }}
     {{- end }}
     backendRefs:
     - name: {{ .app }}-service

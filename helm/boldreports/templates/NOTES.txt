@@ -18,9 +18,22 @@ Thank you for installing {{ .Chart.Name }}.
 6. Configure the Bold Reports On-Premise application startup to use the application. Please refer the following link for more details on configuring the application startup.
 
 https://help.boldreports.com/enterprise-reporting/administrator-guide/application-startup/
+{{- if and .Values.gatewayApi .Values.gatewayApi.enabled .Values.loadBalancer.affinityCookie.enable (not (and .Values.gatewayApi.sessionPersistence .Values.gatewayApi.sessionPersistence.enabled)) }}
+
+WARNING: gatewayApi is enabled without session affinity. reports-viewer keeps rendered reports in
+pod memory, so with more than one viewer replica exports can fail. Set
+gatewayApi.sessionPersistence.enabled: true, or configure cookie affinity with your Gateway
+implementation's policy.
+{{- end }}
 {{- else }}
 Thank you for upgrading {{ .Chart.Name }}.
 
 Chart Version: {{ .Chart.Version }}
 App Version: {{ $.Chart.AppVersion | quote }}
+{{- if and .Values.gatewayApi .Values.gatewayApi.enabled .Values.loadBalancer.affinityCookie.enable (not (and .Values.gatewayApi.sessionPersistence .Values.gatewayApi.sessionPersistence.enabled)) }}
+WARNING: gatewayApi is enabled without session affinity. reports-viewer keeps rendered reports in
+pod memory, so with more than one viewer replica exports can fail. Set
+gatewayApi.sessionPersistence.enabled: true, or configure cookie affinity with your Gateway
+implementation's policy.
+{{- end }}
 {{- end }}

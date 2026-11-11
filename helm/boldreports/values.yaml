@@ -543,10 +543,8 @@ lifecycle: {}
 
 # Gateway API HTTPRoute for any conformant implementation (Envoy Gateway, Istio, Cilium, NGINX
 # Gateway Fabric, cloud gateways). Routes the standard Bold paths to the services listed in
-# instanceConfig. Set loadBalancer.type: none when using it, otherwise the default traefik
-# routes are rendered as well. Session affinity for reports-viewer (needed for exports with more
-# than one replica) must be configured with your implementation's policy, e.g. an Envoy Gateway
-# BackendTrafficPolicy with consistentHash type Cookie. `timeouts` needs Gateway API v1.2+ CRDs.
+# instanceConfig. Requires loadBalancer.type: none (rendering fails otherwise, see allowLoadBalancer).
+# `timeouts` needs Gateway API v1.2+ CRDs.
 gatewayApi:
   enabled: false
   name: bold-reports
@@ -569,3 +567,16 @@ gatewayApi:
   serviceTimeouts: {}
   # Additional HTTPRoute rules appended as-is.
   extraRules: []
+  # Render both this HTTPRoute and the loadBalancer.type routes (e.g. while migrating).
+  allowLoadBalancer: false
+  # Cookie session affinity, the equivalent of loadBalancer.affinityCookie for the other load
+  # balancers. reports-viewer keeps rendered reports in pod memory, so with more than one viewer
+  # replica exports fail without it. Uses the HTTPRoute sessionPersistence field, which needs the
+  # Gateway API experimental-channel CRDs and an implementation that supports it (e.g. Envoy
+  # Gateway); with standard-channel CRDs configure affinity with your implementation's own policy.
+  # Each service gets its own cookie (<cookieNamePrefix><app>).
+  sessionPersistence:
+    enabled: false
+    cookieNamePrefix: bold.k8s.
+    # Cookie lifetime, e.g. 600s. Empty = a session cookie that lasts until the browser closes.
+    absoluteTimeout: ""
