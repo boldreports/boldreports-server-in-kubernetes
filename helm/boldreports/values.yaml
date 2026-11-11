@@ -474,7 +474,9 @@ readinessProbe:
   periodSeconds: 10
   timeoutSeconds: 10
 
-# Optional liveness / startup probes (disabled by default).
+# Optional liveness / startup probes (disabled by default). Per-service probe settings are
+# merged over these, so a service can change one value (or set enabled: false) without
+# repeating the handler.
 livenessProbe:
   enabled: false
   httpGet:
@@ -519,6 +521,7 @@ serviceAccount:
   automountServiceAccountToken:
 
 # Roll the pods when the log4net or branding ConfigMaps change (adds checksum annotations).
+# The checksums include the chart's version labels, so pods also roll on every chart upgrade.
 rollOnConfigChange: false
 
 # Deployment rollout settings (global, or per service under instanceConfig[]).
@@ -540,7 +543,10 @@ lifecycle: {}
 
 # Gateway API HTTPRoute for any conformant implementation (Envoy Gateway, Istio, Cilium, NGINX
 # Gateway Fabric, cloud gateways). Routes the standard Bold paths to the services listed in
-# instanceConfig. Use instead of loadBalancer.type ingress controllers.
+# instanceConfig. Set loadBalancer.type: none when using it, otherwise the default traefik
+# routes are rendered as well. Session affinity for reports-viewer (needed for exports with more
+# than one replica) must be configured with your implementation's policy, e.g. an Envoy Gateway
+# BackendTrafficPolicy with consistentHash type Cookie. `timeouts` needs Gateway API v1.2+ CRDs.
 gatewayApi:
   enabled: false
   name: bold-reports

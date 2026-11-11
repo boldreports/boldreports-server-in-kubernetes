@@ -57,8 +57,9 @@ spec:
       labels:
         app.kubernetes.io/name: {{ $service.app }}
         app.kubernetes.io/instance: {{ $.Release.Name }}
-        {{- with (merge (dict) ($service.podLabels | default dict) ($.Values.podLabels | default dict)) }}
-        {{- toYaml . | nindent 8 }}
+        {{- /* The selector labels above can't be overridden: changing them would orphan the Deployment's pods. */}}
+        {{- with (omit (merge (dict) ($service.podLabels | default dict) ($.Values.podLabels | default dict)) "app.kubernetes.io/name" "app.kubernetes.io/instance") }}
+        {{- include "boldreports.stringMap" . | nindent 8 }}
         {{- end }}
       {{- $podAnnotations := merge (dict) ($service.podAnnotations | default dict) ($.Values.podAnnotations | default dict) }}
       {{- if $.Values.rollOnConfigChange }}
@@ -67,7 +68,7 @@ spec:
       {{- end }}
       {{- with $podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
+        {{- include "boldreports.stringMap" . | nindent 8 }}
       {{- end }}
     spec:
       {{- with (include "boldreports.podServiceAccountName" $) }}
@@ -90,23 +91,21 @@ spec:
       {{- end }}
       {{- with (merge (dict) ($service.nodeSelector | default dict) ($.Values.nodeSelector | default dict)) }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
+        {{- include "boldreports.stringMap" . | nindent 8 }}
       {{- end }}
       {{- with ($service.topologySpreadConstraints | default $.Values.topologySpreadConstraints) }}
-      topologySpreadConstraints:
+      {{- /* Every field is passed through (minDomains, matchLabelKeys, nodeAffinityPolicy, ...);
+             maxSkew, topologyKey, whenUnsatisfiable and labelSelector get defaults when omitted. */}}
+      {{- $constraints := list }}
       {{- range . }}
-      - maxSkew: {{ .maxSkew | default 1 }}
-        topologyKey: {{ .topologyKey | default "kubernetes.io/hostname" }}
-        whenUnsatisfiable: {{ .whenUnsatisfiable | default "ScheduleAnyway" }}
-        labelSelector:
-          {{- if .labelSelector }}
-          {{- toYaml .labelSelector | nindent 10 }}
-          {{- else }}
-          matchLabels:
-            app.kubernetes.io/name: {{ $service.app }}
-            app.kubernetes.io/instance: {{ $.Release.Name }}
-          {{- end }}
+      {{- $c := merge (deepCopy .) (dict "maxSkew" 1 "topologyKey" "kubernetes.io/hostname" "whenUnsatisfiable" "ScheduleAnyway") }}
+      {{- if not $c.labelSelector }}
+      {{- $_ := set $c "labelSelector" (dict "matchLabels" (dict "app.kubernetes.io/name" $service.app "app.kubernetes.io/instance" $.Release.Name)) }}
       {{- end }}
+      {{- $constraints = append $constraints $c }}
+      {{- end }}
+      topologySpreadConstraints:
+        {{- toYaml $constraints | nindent 8 }}
       {{- end }}
       {{- if ne $service.app "id-web" }}
       initContainers:
@@ -269,7 +268,7 @@ spec:
         {{- end }}
         {{- /* Global extraEnv first, then per-service env, so a service can override a global value. */}}
         {{- with (concat ($.Values.extraEnv | default list) ($service.env | default list)) }}
-        {{- toYaml . | nindent 8 }}
+        {{- include "boldreports.envList" . | nindent 8 }}
         {{- end }}
         {{- $extraEnvFrom := concat ($.Values.extraEnvFrom | default list) ($service.envFrom | default list) }}
         {{- if or (eq $service.app "id-ums") $extraEnvFrom }}
@@ -300,16 +299,16 @@ spec:
           {{- with $readiness.failureThreshold }}
           failureThreshold: {{ . }}
           {{- end }}
-        {{- with ($service.livenessProbe | default $.Values.livenessProbe) }}
-        {{- if .enabled }}
-        livenessProbe:
-          {{- toYaml (omit . "enabled") | nindent 10 }}
-        {{- end }}
-        {{- end }}
-        {{- with ($service.startupProbe | default $.Values.startupProbe) }}
-        {{- if .enabled }}
-        startupProbe:
-          {{- toYaml (omit . "enabled") | nindent 10 }}
+        {{- /* Per-service probe keys are merged over the global probe, so a service can change one
+               setting without repeating the handler. `enabled` is resolved separately because
+               merging ignores false values. */}}
+        {{- range $probeName := list "livenessProbe" "startupProbe" }}
+        {{- $globalProbe := index $.Values $probeName | default dict }}
+        {{- $serviceProbe := index $service $probeName | default dict }}
+        {{- $enabled := ternary $serviceProbe.enabled $globalProbe.enabled (hasKey $serviceProbe "enabled") }}
+        {{- if $enabled }}
+        {{ $probeName }}:
+          {{- toYaml (omit (mergeOverwrite (deepCopy $globalProbe) $serviceProbe) "enabled") | nindent 10 }}
         {{- end }}
         {{- end }}
         volumeMounts:

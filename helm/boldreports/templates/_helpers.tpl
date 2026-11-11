@@ -150,3 +150,31 @@ serviceAccount.name is set, so pods keep using the namespace's default ServiceAc
 {{- $sa.name -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Render a map as YAML with every value converted to a string. Labels, annotations and
+nodeSelector values must be strings; unquoted values like `true` or `1234` are rejected by the API.
+*/}}
+{{- define "boldreports.stringMap" -}}
+{{- $out := dict -}}
+{{- range $k, $v := . -}}
+{{- $_ := set $out $k (ternary "" (toString $v) (kindIs "invalid" $v)) -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end -}}
+
+{{/*
+Render a list of EnvVar entries, converting `value` to a string (e.g. `value: 0` -> "0").
+Entries using valueFrom are rendered unchanged.
+*/}}
+{{- define "boldreports.envList" -}}
+{{- $out := list -}}
+{{- range . -}}
+{{- $e := deepCopy . -}}
+{{- if hasKey $e "value" -}}
+{{- $_ := set $e "value" (ternary "" (toString $e.value) (kindIs "invalid" $e.value)) -}}
+{{- end -}}
+{{- $out = append $out $e -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end -}}

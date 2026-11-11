@@ -46,8 +46,12 @@ spec:
   hostnames:
     {{- toYaml $gw.hostnames | nindent 4 }}
   {{- else if or (hasPrefix "https://" .Values.appBaseUrl) (hasPrefix "http://" .Values.appBaseUrl) }}
+  {{- /* HTTPRoute hostnames can't carry a port or be an IP address; with an IP the route matches any host. */}}
+  {{- $host := regexReplaceAll ":[0-9]+$" (index (splitList "/" .Values.appBaseUrl) 2) "" }}
+  {{- if not (regexMatch "^[0-9.]+$|^\\[" $host) }}
   hostnames:
-  - {{ index (splitList "/" .Values.appBaseUrl) 2 | quote }}
+  - {{ $host | quote }}
+  {{- end }}
   {{- end }}
   rules:
   {{- range $routes }}
