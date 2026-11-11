@@ -12,6 +12,12 @@ persistentVolume:
   # Change this name to avoid conflicts with previous Bold Reports persistent volumes.
   name: bold-services-fileserver
   capacity: 3Gi
+  # Set to false when the cluster already provides the StorageClass (e.g. efs-sc). The chart's
+  # StorageClass is cluster-scoped, so uninstalling the release would delete it for every workload.
+  createStorageClass: true
+  # Add helm.sh/resource-policy: keep to the StorageClass, PersistentVolume and claim so that
+  # uninstalling the release (or a GitOps prune) doesn't remove the shared storage.
+  keep: false
   gke:
     fileShareName: ''
     fileShareIp: ''
@@ -100,7 +106,9 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   idTag: 15.1.10
   reportsTag: 15.1.10
-  pullPolicy: IfNotPresent
+  # Applied to all Bold service containers. (The 15.1.10 template hard-coded Always and
+  # ignored this value; Always keeps that behaviour.)
+  pullPolicy: Always
 imagePullSecrets: []
 
 
@@ -221,6 +229,22 @@ autoscaling:
     podsPeriodSeconds: 60
     percentValue: 10
     percentPeriodSeconds: 60
+    # Optional HorizontalPodAutoscaler scaleUp behavior (rendered as-is), e.g.
+    #   scaleUp:
+    #     stabilizationWindowSeconds: 0
+    #     policies:
+    #       - type: Pods
+    #         value: 2
+    #         periodSeconds: 60
+    scaleUp: {}
+  # Per service, instanceConfig[].targetCPUUtilizationPercentage / targetMemoryUtilizationPercentage
+  # override the targets above; 0 or null drops that metric for the service. Memory-based scaling
+  # rarely scales back down for .NET services, which keep memory they have allocated.
+
+# Set existingSecret: true if you manage the "bold-secret" Secret (Bing Maps and Application
+# Insights settings) outside the chart.
+boldSecret:
+  existingSecret: false
 
 bingMapWidget:
   enabled: false
@@ -360,3 +384,199 @@ podAffinityEnable: false
 # Pod anti-affinity ensures that the pods are not scheduled into nodes with matching pods.
 # Set this to true if you use pod AntiAffinity in your cluster.
 podAntiAffinityEnable: false
+
+# Set to "preferred" to spread replicas across nodes on a best-effort basis instead of
+# refusing to schedule when no other node is free (only used with podAntiAffinityEnable: true).
+podAntiAffinityType: required
+
+# ---------------------------------------------------------------------------------------
+# Pod customisation. All settings below are optional and empty by default, so the rendered
+# manifests are unchanged unless you set them. Unless stated otherwise each setting can be
+# given globally here and overridden per service under instanceConfig[] with the same key.
+# ---------------------------------------------------------------------------------------
+
+# Extra pod annotations / labels, e.g. karpenter.sh/do-not-disrupt, Datadog/Prometheus tags.
+# Per-service values are merged over the global ones.
+podAnnotations: {}
+podLabels: {}
+
+# Extra environment variables for the main container, e.g. .NET runtime tuning:
+#   - name: DOTNET_gcServer
+#     value: "0"
+#   - name: DOTNET_GCHeapHardLimitPercent
+#     value: "0x46"          # 70% of the container memory limit (hex)
+# Global entries are rendered first, then instanceConfig[].env (so a service can override).
+extraEnv: []
+# Extra envFrom sources (secretRef / configMapRef) for every service; per service: envFrom.
+extraEnvFrom: []
+
+# Extra volumes / mounts, e.g. custom fonts or a writable /tmp with readOnlyRootFilesystem.
+# Global and per-service (extraVolumes / extraVolumeMounts) lists are concatenated.
+extraVolumes: []
+extraVolumeMounts: []
+
+# Pod and container securityContext (container settings also apply to the init container).
+# Example for Pod Security Standards "restricted" (verify the images support it first):
+#   podSecurityContext:
+#     runAsNonRoot: true
+#     seccompProfile:
+#       type: RuntimeDefault
+#   containerSecurityContext:
+#     allowPrivilegeEscalation: false
+#     capabilities:
+#       drop: ["ALL"]
+podSecurityContext: {}
+containerSecurityContext: {}
+
+# Resources for the id-web-initialization init container (otherwise namespace defaults apply).
+initContainerResources: {}
+
+# Raw affinity block. When set (globally or per service) it replaces nodeAffinityEnable /
+# podAffinityEnable / podAntiAffinityEnable for that pod.
+affinity: {}
+# nodeAffinity (above) also accepts a list of expressions instead of key/operator/value:
+#   nodeAffinity:
+#     matchExpressions:
+#       - key: karpenter.sh/capacity-type
+#         operator: In
+#         values: ["on-demand"]
+#       - key: kubernetes.io/arch
+#         operator: In
+#         values: ["amd64"]
+
+nodeSelector: {}
+
+# Spread replicas across nodes/zones. labelSelector defaults to the service's own pods.
+#   topologySpreadConstraints:
+#     - maxSkew: 1
+#       topologyKey: kubernetes.io/hostname
+#       whenUnsatisfiable: ScheduleAnyway
+topologySpreadConstraints: []
+
+priorityClassName: ""
+# Seconds to let in-flight requests (exports, report rendering) finish on shutdown.
+terminationGracePeriodSeconds:
+
+# PodDisruptionBudget per service, protecting in-flight work from voluntary evictions
+# (node drains, cluster-autoscaler / Karpenter consolidation). Per service override:
+#   instanceConfig:
+#     - app: reports-api
+#       podDisruptionBudget:
+#         enabled: true
+#         maxUnavailable: 0
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
+
+# Readiness probe timings (the probe itself is always rendered, as before).
+readinessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 10
+
+# Optional liveness / startup probes (disabled by default). Per-service probe settings are
+# merged over these, so a service can change one value (or set enabled: false) without
+# repeating the handler.
+livenessProbe:
+  enabled: false
+  httpGet:
+    path: /health-check
+    port: 80
+  initialDelaySeconds: 120
+  periodSeconds: 20
+  timeoutSeconds: 10
+  failureThreshold: 6
+startupProbe:
+  enabled: false
+  httpGet:
+    path: /health-check
+    port: 80
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 60
+
+# Additional per-service keys accepted under instanceConfig[]:
+#   cpuResourceLimits / memoryResourceLimits  rendered as resources.limits when set
+#   hpaEnabled: false                         skip the HPA and use replicaCount for this service
+#   tolerations: [...]                        appended to the global tolerations
+#   podAnnotations, podLabels, env, envFrom, extraVolumes, extraVolumeMounts,
+#   podSecurityContext, containerSecurityContext, affinity, nodeSelector,
+#   topologySpreadConstraints, priorityClassName, terminationGracePeriodSeconds,
+#   podDisruptionBudget, readinessProbe, livenessProbe, startupProbe, lifecycle, strategy,
+#   revisionHistoryLimit, targetCPUUtilizationPercentage, targetMemoryUtilizationPercentage
+
+# ServiceAccount for the Bold service pods. By default no serviceAccountName is set and pods use
+# the namespace's "default" ServiceAccount; workload identity (IRSA, GKE / Azure workload
+# identity) then has to be granted to every pod in the namespace. Create a dedicated one instead:
+#   serviceAccount:
+#     create: true
+#     annotations:
+#       eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<bold-reports-role>
+serviceAccount:
+  create: false
+  # Name to create, or an existing ServiceAccount to use when create is false. Defaults to "bold-reports".
+  name: ""
+  annotations: {}
+  # true / false to set automountServiceAccountToken on the ServiceAccount and pods; null leaves it unset.
+  automountServiceAccountToken:
+
+# Roll the pods when the log4net or branding ConfigMaps change (adds checksum annotations).
+# The checksums include the chart's version labels, so pods also roll on every chart upgrade.
+rollOnConfigChange: false
+
+# Deployment rollout settings (global, or per service under instanceConfig[]).
+#   strategy:
+#     type: RollingUpdate
+#     rollingUpdate:
+#       maxSurge: 1
+#       maxUnavailable: 0
+strategy: {}
+revisionHistoryLimit:
+
+# Container lifecycle hooks (global, or per service). A short preStop sleep lets load balancers
+# and gateways stop sending traffic before the container exits:
+#   lifecycle:
+#     preStop:
+#       exec:
+#         command: ["sh", "-c", "sleep 10"]
+lifecycle: {}
+
+# Gateway API HTTPRoute for any conformant implementation (Envoy Gateway, Istio, Cilium, NGINX
+# Gateway Fabric, cloud gateways). Routes the standard Bold paths to the services listed in
+# instanceConfig. Requires loadBalancer.type: none (rendering fails otherwise, see allowLoadBalancer).
+# `timeouts` needs Gateway API v1.2+ CRDs.
+gatewayApi:
+  enabled: false
+  name: bold-reports
+  # Required: the Gateway listener(s) to attach to.
+  #   parentRefs:
+  #     - name: my-gateway
+  #       namespace: gateway-system
+  #       sectionName: https
+  parentRefs: []
+  # Defaults to the host in appBaseUrl.
+  hostnames: []
+  annotations: {}
+  labels: {}
+  # Default timeouts for every rule (HTTPRouteTimeouts), e.g. {request: 300s}
+  timeouts: {}
+  # Per-service overrides keyed by app name, e.g.
+  #   serviceTimeouts:
+  #     reports-viewer:
+  #       request: 600s
+  serviceTimeouts: {}
+  # Additional HTTPRoute rules appended as-is.
+  extraRules: []
+  # Render both this HTTPRoute and the loadBalancer.type routes (e.g. while migrating).
+  allowLoadBalancer: false
+  # Cookie session affinity, the equivalent of loadBalancer.affinityCookie for the other load
+  # balancers. reports-viewer keeps rendered reports in pod memory, so with more than one viewer
+  # replica exports fail without it. Uses the HTTPRoute sessionPersistence field, which needs the
+  # Gateway API experimental-channel CRDs and an implementation that supports it (e.g. Envoy
+  # Gateway); with standard-channel CRDs configure affinity with your implementation's own policy.
+  # Each service gets its own cookie (<cookieNamePrefix><app>).
+  sessionPersistence:
+    enabled: false
+    cookieNamePrefix: bold.k8s.
+    # Cookie lifetime, e.g. 600s. Empty = a session cookie that lasts until the browser closes.
+    absoluteTimeout: ""

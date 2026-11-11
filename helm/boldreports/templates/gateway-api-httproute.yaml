@@ -1,0 +1,104 @@
+{{- /*
+Generic Gateway API HTTPRoute for any conformant implementation (Envoy Gateway, Istio, Cilium,
+NGINX Gateway Fabric, AWS/GKE gateways, ...). Rules are rendered only for services present in
+instanceConfig. Gateway API matches the longest PathPrefix, so rule order does not matter.
+*/}}
+{{- if and .Values.gatewayApi .Values.gatewayApi.enabled }}
+{{- $gw := .Values.gatewayApi }}
+{{- /* The loadBalancer.type templates would expose Bold a second time, and fail to install where
+       their CRDs (Traefik, Kong, Istio, Azure ALB) don't exist. */}}
+{{- $lbType := (.Values.loadBalancer | default dict).type | default "" }}
+{{- if and (has $lbType (list "nginx" "traefik" "alb" "istio" "kong" "azure-alb")) (not $gw.allowLoadBalancer) }}
+{{- fail (printf "gatewayApi.enabled renders its own HTTPRoute: set loadBalancer.type: none (currently %q), or gatewayApi.allowLoadBalancer: true to render both while migrating" $lbType) }}
+{{- end }}
+{{- $persistence := $gw.sessionPersistence | default dict }}
+{{- $apps := list }}
+{{- range .Values.instanceConfig }}{{ $apps = append $apps .app }}{{ end }}
+{{- $routes := list
+  (dict "path" "/reporting/api" "app" "reports-api")
+  (dict "path" "/reporting/jobs" "app" "reports-jobs")
+  (dict "path" "/reporting/reportservice" "app" "reports-reportservice")
+  (dict "path" "/reporting/viewer" "app" "reports-viewer")
+  (dict "path" "/reporting/ai" "app" "reports-ai")
+  (dict "path" "/reportsai" "app" "reports-ai")
+  (dict "path" "/reporting/mcp" "app" "reports-mcp")
+  (dict "path" "/reportsmcp" "app" "reports-mcp")
+  (dict "path" "/reporting" "app" "reports-web")
+  (dict "path" "/api" "app" "id-api")
+  (dict "path" "/ums" "app" "id-ums")
+  (dict "path" "/etlservice" "app" "bold-etl" "rewrite" true)
+  (dict "path" "/" "app" "id-web")
+}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  labels:
+    {{- include "boldreports.labels" . | nindent 4 }}
+    {{- with $gw.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  name: {{ $gw.name | default "bold-reports" }}
+{{ include "boldreports.namespace" . | indent 2 }}
+  {{- with $gw.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not $gw.parentRefs }}
+  {{- fail "gatewayApi.parentRefs is required when gatewayApi.enabled is true" }}
+  {{- end }}
+  parentRefs:
+    {{- toYaml $gw.parentRefs | nindent 4 }}
+  {{- if $gw.hostnames }}
+  hostnames:
+    {{- toYaml $gw.hostnames | nindent 4 }}
+  {{- else if or (hasPrefix "https://" .Values.appBaseUrl) (hasPrefix "http://" .Values.appBaseUrl) }}
+  {{- /* HTTPRoute hostnames can't carry a port or be an IP address; with an IP the route matches any host. */}}
+  {{- $host := regexReplaceAll ":[0-9]+$" (index (splitList "/" .Values.appBaseUrl) 2) "" }}
+  {{- if not (regexMatch "^[0-9.]+$|^\\[" $host) }}
+  hostnames:
+  - {{ $host | quote }}
+  {{- end }}
+  {{- end }}
+  rules:
+  {{- range $routes }}
+  {{- if has .app $apps }}
+  {{- $timeouts := index ($gw.serviceTimeouts | default dict) .app | default $gw.timeouts }}
+  - matches:
+    - path:
+        type: PathPrefix
+        value: {{ .path }}
+    {{- if .rewrite }}
+    # bold-etl serves from /, so strip the prefix (otherwise it renders <base href="/etlservice/etlservice/">)
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
+    {{- end }}
+    {{- with $timeouts }}
+    timeouts:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if $persistence.enabled }}
+    {{- /* One cookie per service: implementations such as Envoy store the backend address in the
+           cookie, so a shared name would be overwritten whenever the browser calls another service. */}}
+    sessionPersistence:
+      sessionName: {{ printf "%s%s" ($persistence.cookieNamePrefix | default "bold.k8s.") .app | quote }}
+      type: Cookie
+      {{- with $persistence.absoluteTimeout }}
+      absoluteTimeout: {{ . }}
+      cookieConfig:
+        lifetimeType: Permanent
+      {{- end }}
+    {{- end }}
+    backendRefs:
+    - name: {{ .app }}-service
+      port: {{ include "boldreports.servicePort" .app }}
+  {{- end }}
+  {{- end }}
+  {{- with $gw.extraRules }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
