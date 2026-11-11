@@ -130,3 +130,23 @@ Define the boldreports.notes template if set with forceNamespace or .Release.Nam
 {{ printf "$ kubectl get hpa -n %s" .Release.Namespace }}
 {{- end -}}
 {{- end -}}
+{{/*
+Service port for a Bold service (matches templates/service.yaml).
+*/}}
+{{- define "boldreports.servicePort" -}}
+{{- $ports := dict "id-web" 6000 "id-api" 6001 "id-ums" 6002 "reports-web" 6550 "reports-api" 6551 "reports-jobs" 6552 "reports-reportservice" 6553 "reports-viewer" 6554 "reports-ai" 6555 "reports-mcp" 6556 "bold-etl" 6009 -}}
+{{- get $ports . -}}
+{{- end -}}
+
+{{/*
+ServiceAccount name for the Bold service pods. Empty when neither serviceAccount.create nor
+serviceAccount.name is set, so pods keep using the namespace's default ServiceAccount.
+*/}}
+{{- define "boldreports.podServiceAccountName" -}}
+{{- $sa := .Values.serviceAccount | default dict -}}
+{{- if $sa.create -}}
+{{- $sa.name | default "bold-reports" -}}
+{{- else if $sa.name -}}
+{{- $sa.name -}}
+{{- end -}}
+{{- end -}}

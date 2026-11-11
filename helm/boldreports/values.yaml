@@ -12,6 +12,12 @@ persistentVolume:
   # Change this name to avoid conflicts with previous Bold Reports persistent volumes.
   name: bold-services-fileserver
   capacity: 3Gi
+  # Set to false when the cluster already provides the StorageClass (e.g. efs-sc). The chart's
+  # StorageClass is cluster-scoped, so uninstalling the release would delete it for every workload.
+  createStorageClass: true
+  # Add helm.sh/resource-policy: keep to the StorageClass, PersistentVolume and claim so that
+  # uninstalling the release (or a GitOps prune) doesn't remove the shared storage.
+  keep: false
   gke:
     fileShareName: ''
     fileShareIp: ''
@@ -223,6 +229,22 @@ autoscaling:
     podsPeriodSeconds: 60
     percentValue: 10
     percentPeriodSeconds: 60
+    # Optional HorizontalPodAutoscaler scaleUp behavior (rendered as-is), e.g.
+    #   scaleUp:
+    #     stabilizationWindowSeconds: 0
+    #     policies:
+    #       - type: Pods
+    #         value: 2
+    #         periodSeconds: 60
+    scaleUp: {}
+  # Per service, instanceConfig[].targetCPUUtilizationPercentage / targetMemoryUtilizationPercentage
+  # override the targets above; 0 or null drops that metric for the service. Memory-based scaling
+  # rarely scales back down for .NET services, which keep memory they have allocated.
+
+# Set existingSecret: true if you manage the "bold-secret" Secret (Bing Maps and Application
+# Insights settings) outside the chart.
+boldSecret:
+  existingSecret: false
 
 bingMapWidget:
   enabled: false
@@ -478,4 +500,66 @@ startupProbe:
 #   podAnnotations, podLabels, env, envFrom, extraVolumes, extraVolumeMounts,
 #   podSecurityContext, containerSecurityContext, affinity, nodeSelector,
 #   topologySpreadConstraints, priorityClassName, terminationGracePeriodSeconds,
-#   podDisruptionBudget, readinessProbe, livenessProbe, startupProbe
+#   podDisruptionBudget, readinessProbe, livenessProbe, startupProbe, lifecycle, strategy,
+#   revisionHistoryLimit, targetCPUUtilizationPercentage, targetMemoryUtilizationPercentage
+
+# ServiceAccount for the Bold service pods. By default no serviceAccountName is set and pods use
+# the namespace's "default" ServiceAccount; workload identity (IRSA, GKE / Azure workload
+# identity) then has to be granted to every pod in the namespace. Create a dedicated one instead:
+#   serviceAccount:
+#     create: true
+#     annotations:
+#       eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<bold-reports-role>
+serviceAccount:
+  create: false
+  # Name to create, or an existing ServiceAccount to use when create is false. Defaults to "bold-reports".
+  name: ""
+  annotations: {}
+  # true / false to set automountServiceAccountToken on the ServiceAccount and pods; null leaves it unset.
+  automountServiceAccountToken:
+
+# Roll the pods when the log4net or branding ConfigMaps change (adds checksum annotations).
+rollOnConfigChange: false
+
+# Deployment rollout settings (global, or per service under instanceConfig[]).
+#   strategy:
+#     type: RollingUpdate
+#     rollingUpdate:
+#       maxSurge: 1
+#       maxUnavailable: 0
+strategy: {}
+revisionHistoryLimit:
+
+# Container lifecycle hooks (global, or per service). A short preStop sleep lets load balancers
+# and gateways stop sending traffic before the container exits:
+#   lifecycle:
+#     preStop:
+#       exec:
+#         command: ["sh", "-c", "sleep 10"]
+lifecycle: {}
+
+# Gateway API HTTPRoute for any conformant implementation (Envoy Gateway, Istio, Cilium, NGINX
+# Gateway Fabric, cloud gateways). Routes the standard Bold paths to the services listed in
+# instanceConfig. Use instead of loadBalancer.type ingress controllers.
+gatewayApi:
+  enabled: false
+  name: bold-reports
+  # Required: the Gateway listener(s) to attach to.
+  #   parentRefs:
+  #     - name: my-gateway
+  #       namespace: gateway-system
+  #       sectionName: https
+  parentRefs: []
+  # Defaults to the host in appBaseUrl.
+  hostnames: []
+  annotations: {}
+  labels: {}
+  # Default timeouts for every rule (HTTPRouteTimeouts), e.g. {request: 300s}
+  timeouts: {}
+  # Per-service overrides keyed by app name, e.g.
+  #   serviceTimeouts:
+  #     reports-viewer:
+  #       request: 600s
+  serviceTimeouts: {}
+  # Additional HTTPRoute rules appended as-is.
+  extraRules: []

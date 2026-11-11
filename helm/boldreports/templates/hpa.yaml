@@ -25,25 +25,35 @@ spec:
     name: {{ $service.app }}-deployment
   minReplicas: {{ $service.minReplicas }}
   maxReplicas: {{ $service.maxReplicas }}
+  {{- /* Per-service targets override the global ones; 0 or null drops that metric for the service. */}}
+  {{- $cpuTarget := ternary $service.targetCPUUtilizationPercentage $.Values.autoscaling.targetCPUUtilizationPercentage (hasKey $service "targetCPUUtilizationPercentage") }}
+  {{- $memoryTarget := ternary $service.targetMemoryUtilizationPercentage $.Values.autoscaling.targetMemoryUtilizationPercentage (hasKey $service "targetMemoryUtilizationPercentage") }}
+  {{- if not (or $cpuTarget $memoryTarget) }}
+  {{- fail (printf "instanceConfig %s: the HPA needs a CPU or memory target; set hpaEnabled: false to run without one" $service.app) }}
+  {{- end }}
   metrics:
-  {{- if $.Values.autoscaling.targetCPUUtilizationPercentage }}
+  {{- if $cpuTarget }}
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: {{ $.Values.autoscaling.targetCPUUtilizationPercentage }}
+        averageUtilization: {{ $cpuTarget }}
   {{- end }}
-  {{- if $.Values.autoscaling.targetMemoryUtilizationPercentage }}
+  {{- if $memoryTarget }}
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: {{ $.Values.autoscaling.targetMemoryUtilizationPercentage }}
+        averageUtilization: {{ $memoryTarget }}
   {{- end }}
   {{- if ne $.Values.clusterProvider "aks" }}
   behavior:
+    {{- with $.Values.autoscaling.behavior.scaleUp }}
+    scaleUp:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     scaleDown:
       stabilizationWindowSeconds: {{ $.Values.autoscaling.behavior.stabilizationWindowSeconds }}
       policies:

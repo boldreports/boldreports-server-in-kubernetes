@@ -44,6 +44,14 @@ spec:
   {{- if or (not $.Values.autoscaling.enabled) (eq (toString $service.hpaEnabled) "false") }}
   replicas: {{ $service.replicaCount }}
   {{- end }}
+  {{- $revisionHistoryLimit := ternary $service.revisionHistoryLimit $.Values.revisionHistoryLimit (hasKey $service "revisionHistoryLimit") }}
+  {{- if not (kindIs "invalid" $revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ $revisionHistoryLimit }}
+  {{- end }}
+  {{- with ($service.strategy | default $.Values.strategy) }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -52,11 +60,24 @@ spec:
         {{- with (merge (dict) ($service.podLabels | default dict) ($.Values.podLabels | default dict)) }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with (merge (dict) ($service.podAnnotations | default dict) ($.Values.podAnnotations | default dict)) }}
+      {{- $podAnnotations := merge (dict) ($service.podAnnotations | default dict) ($.Values.podAnnotations | default dict) }}
+      {{- if $.Values.rollOnConfigChange }}
+      {{- $_ := set $podAnnotations "checksum/log4net-config" (include (print $.Template.BasePath "/log4net_config.yaml") $ | sha256sum) }}
+      {{- $_ := set $podAnnotations "checksum/branding-config" (include (print $.Template.BasePath "/branding_config.yaml") $ | sha256sum) }}
+      {{- end }}
+      {{- with $podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- with (include "boldreports.podServiceAccountName" $) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      {{- if and $.Values.serviceAccount (hasKey $.Values.serviceAccount "automountServiceAccountToken") }}
+      {{- if not (kindIs "invalid" $.Values.serviceAccount.automountServiceAccountToken) }}
+      automountServiceAccountToken: {{ $.Values.serviceAccount.automountServiceAccountToken }}
+      {{- end }}
+      {{- end }}
       {{- with ($service.podSecurityContext | default $.Values.podSecurityContext) }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -153,6 +174,10 @@ spec:
         imagePullPolicy: {{ $.Values.image.pullPolicy | default "Always" }}
         {{- with ($service.containerSecurityContext | default $.Values.containerSecurityContext) }}
         securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with ($service.lifecycle | default $.Values.lifecycle) }}
+        lifecycle:
           {{- toYaml . | nindent 10 }}
         {{- end }}
         ports:
