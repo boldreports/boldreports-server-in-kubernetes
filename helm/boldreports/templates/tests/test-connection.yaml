@@ -1,24 +1,15 @@
-{{- $ns := ternary .Values.namespace .Release.Namespace (eq .Release.Namespace "default") }}
 apiVersion: v1
 kind: Pod
 metadata:
   name: "{{ include "boldreports.fullname" . }}-test-connection"
-  namespace: {{ $ns }}
   labels:
     {{- include "boldreports.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   containers:
     - name: wget
-      {{- /* Same image as the id-web-initialization init container (templates/deployment.yaml). */}}
-      {{- if and (hasKey .Values "initContainersImage") (hasKey .Values.initContainersImage "initContainersRepo") (hasKey .Values.initContainersImage "initContainersTag") }}
-      image: "{{ .Values.initContainersImage.initContainersRepo }}:{{ .Values.initContainersImage.initContainersTag }}"
-      {{- else }}
-      image: "busybox:1.28"
-      {{- end }}
+      image: busybox
       command: ['wget']
-      # id-web's Service listens on 6000 and serves /health-check (see templates/service.yaml).
-      args: ['-q', '-T', '10', '-O', '/dev/null', 'http://id-web-service.{{ $ns }}.svc:6000/health-check']
+      args: ['{{ include "boldreports.fullname" . }}:{{ .Values.service.port }}']
   restartPolicy: Never
