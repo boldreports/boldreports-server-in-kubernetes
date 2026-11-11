@@ -12,10 +12,11 @@ metadata:
 spec:
   containers:
     - name: wget
-      {{- if and .Values.initContainersImage .Values.initContainersImage.initContainersRepo .Values.initContainersImage.initContainersTag }}
+      {{- /* Same image as the id-web-initialization init container (templates/deployment.yaml). */}}
+      {{- if and (hasKey .Values "initContainersImage") (hasKey .Values.initContainersImage "initContainersRepo") (hasKey .Values.initContainersImage "initContainersTag") }}
       image: "{{ .Values.initContainersImage.initContainersRepo }}:{{ .Values.initContainersImage.initContainersTag }}"
       {{- else }}
-      image: busybox:1.36
+      image: "busybox:1.28"
       {{- end }}
       command: ['wget']
       # id-web's Service listens on 6000 and serves /health-check (see templates/service.yaml).
