@@ -34,4 +34,5 @@ else
 	kubectl set image deployment/reports-jobs-deployment reports-jobs-container=gcr.io/boldreports/boldreports-server-jobs:$version --namespace=$namespace --record 
 	kubectl set image deployment/reports-reportservice-deployment reports-reportservice-container=gcr.io/boldreports/boldreports-designer:$version --namespace=$namespace --record 
 	kubectl set image deployment/reports-viewer-deployment reports-viewer-container=gcr.io/boldreports/boldreports-viewer:$version --namespace=$namespace --record 
+	kubectl set image deployment/reports-export-deployment reports-export-container=gcr.io/boldreports/boldreports-export:$version --namespace=$namespace --record 
 fi

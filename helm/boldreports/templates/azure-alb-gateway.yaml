@@ -83,6 +83,13 @@ spec:
   - matches:
     - path:
         type: PathPrefix
+        value: /reporting/export
+    backendRefs:
+    - name: reports-export-service
+      port: 6557
+  - matches:
+    - path:
+        type: PathPrefix
         value: /reporting
     backendRefs:
     - name: reports-web-service

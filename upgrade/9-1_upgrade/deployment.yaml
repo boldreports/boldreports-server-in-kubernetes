@@ -413,6 +413,59 @@ spec:
       - name: log4net-config-volume
         configMap:
           name: log4net-config
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reports-export-deployment
+  namespace: <namespace>
+spec:
+  selector:
+    matchLabels:
+      app: reports-export
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: reports-export
+    spec:
+      initContainers:
+      - name: id-web-initialization
+        image: busybox:1.28
+        command: ["/bin/sh","-c"]
+        args: ["if [ ! -f /application/app_data/configuration/config.xml ]; then echo waiting for id-web; sleep 5; else echo config.xml file exist; fi"]
+        volumeMounts:
+        - mountPath: /application/app_data
+          name: reports-export-volume
+      containers:
+      - name: reports-export-container
+        image: us-docker.pkg.dev/boldreports/multi-container/boldreports-export:<image_tag>
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 250m
+            memory: 750Mi
+        readinessProbe:
+          httpGet:
+            path: /health-check
+            port: 80
+          initialDelaySeconds: 40
+          periodSeconds: 10
+        volumeMounts:
+        - mountPath: /application/app_data
+          name: reports-export-volume
+        - mountPath: /application/reporting/export/logs
+          name: log4net-config-volume
+      volumes:
+      - name: reports-export-volume
+        persistentVolumeClaim:
+          claimName: <pvc_name>
+          readOnly: false
+      - name: log4net-config-volume
+        configMap:
+          name: log4net-config
 ---
 apiVersion: apps/v1
 kind: Deployment

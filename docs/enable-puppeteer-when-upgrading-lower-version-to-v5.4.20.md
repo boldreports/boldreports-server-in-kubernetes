@@ -38,4 +38,5 @@
     kubectl rollout restart deployment/reports-web-deployment -n {your_namespace}
     kubectl rollout restart deployment/reports-reportservice-deployment -n {your_namespace}
     kubectl rollout restart deployment/reports-viewer-deployment -n {your_namespace}
+    kubectl rollout restart deployment/reports-export-deployment -n {your_namespace}
     ```
