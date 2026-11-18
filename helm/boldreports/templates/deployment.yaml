@@ -1,4 +1,5 @@
 {{- $isDev := default false $.Values.image.dev }}
+{{- $prefix := ternary "dev-" "" $isDev }}
 {{- range $service := .Values.instanceConfig}}
 {{- /* Define PV check ONCE here — reuse $hasRealPV everywhere */ -}}
 {{- $hasRealPV := or
