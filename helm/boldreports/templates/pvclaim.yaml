@@ -18,12 +18,17 @@
                   (ne (default "" $.Values.persistentVolume.oke.blockVolume.blockVolumeCapacity) ""))))
 -}}
 {{- if and $hasRealPV (not .Values.persistentVolume.useExistingClaim) }}
-{{- if or (eq .Values.clusterProvider "eks") (eq .Values.clusterProvider "ack") (eq .Values.clusterProvider "onpremise") }}
+{{- /* createStorageClass: false skips the cluster-scoped StorageClass when the cluster already provides it. */}}
+{{- if and (ne (toString .Values.persistentVolume.createStorageClass) "false") (or (eq .Values.clusterProvider "eks") (eq .Values.clusterProvider "ack") (eq .Values.clusterProvider "onpremise")) }}
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   labels:
     {{- include "boldreports.labels" . | nindent 4 }}
+  {{- if .Values.persistentVolume.keep }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
   {{- if eq .Values.clusterProvider "eks" }}
   name: {{ default "efs-sc" .Values.persistentVolume.eks.storageClass }}
   {{- else if eq .Values.clusterProvider "aks" }}
@@ -92,6 +97,10 @@ kind: PersistentVolume
 metadata:
  labels:
     {{- include "boldreports.labels" . | nindent 4 }}
+ {{- if .Values.persistentVolume.keep }}
+ annotations:
+   helm.sh/resource-policy: keep
+ {{- end }}
  name: {{ .Values.persistentVolume.name }}
  {{- if eq .Release.Namespace "default" }}
  namespace: {{ .Values.namespace }}
@@ -174,6 +183,10 @@ kind: PersistentVolumeClaim
 metadata:
  labels:
     {{- include "boldreports.labels" . | nindent 4 }}
+ {{- if .Values.persistentVolume.keep }}
+ annotations:
+   helm.sh/resource-policy: keep
+ {{- end }}
  name: {{ .Values.persistentVolume.name }}-claim
  {{- if eq .Release.Namespace "default" }}
  namespace: {{ .Values.namespace }}
@@ -186,7 +199,7 @@ spec:
  {{- if eq .Values.clusterProvider "onpremise" }}
  storageClassName: boldreports-storageclass
  {{- else if eq .Values.clusterProvider "eks" }}
- storageClassName: efs-sc
+ storageClassName: {{ default "efs-sc" .Values.persistentVolume.eks.storageClass }}
  {{- else if eq .Values.clusterProvider "ack" }}
  storageClassName : alibabacloud-cnfs-nas
  {{- else if and (eq .Values.clusterProvider "aks") ( .Values.persistentVolume.aks.nfs.fileShareName ) }}
