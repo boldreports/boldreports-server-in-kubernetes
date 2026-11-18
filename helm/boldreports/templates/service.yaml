@@ -40,6 +40,8 @@ spec:
     port: 6555
     {{- else if eq $service.app "reports-mcp" }}
     port: 6556
+    {{- else if eq $service.app "reports-export" }}
+    port: 6557
     {{- else if eq $service.app "bold-etl" }}
     port: 6009
     {{- end }}
