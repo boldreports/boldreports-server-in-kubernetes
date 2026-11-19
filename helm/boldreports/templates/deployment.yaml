@@ -100,8 +100,6 @@ spec:
         image: "{{ $.Values.image.reportsRepo }}/{{ $prefix }}boldreports-ai:{{ $.Values.image.reportsTag }}"
         {{- else if eq $service.app "reports-mcp" }}
         image: "{{ $.Values.image.reportsRepo }}/{{ $prefix }}boldreports-mcp-server:{{ $.Values.image.reportsTag }}"
-        {{- else if eq $service.app "reports-export" }}
-        image: "{{ $.Values.image.reportsRepo }}/{{ $prefix }}boldreports-export:{{ $.Values.image.reportsTag }}"
         {{- end }}
         imagePullPolicy: Always
         ports:
@@ -230,8 +228,6 @@ spec:
         - mountPath: /application/reporting/ai/logs
         {{- else if eq $service.app "reports-mcp" }}
         - mountPath: /application/reporting/mcp/logs
-        {{- else if eq $service.app "reports-export" }}
-        - mountPath: /application/reporting/export/logs
         {{- end }}
           name: log4net-config-volume
       volumes:
